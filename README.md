@@ -6,12 +6,13 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-18.2-blue)](https://reactjs.org/)
 [![Vite](https://img.shields.io/badge/Vite-7.2-purple)](https://vitejs.dev/)
+[![Live Demo](https://img.shields.io/badge/🌐_Live_Demo-scrubah--pii.heyoub.dev-brightgreen)](https://scrubah-pii.heyoub.dev)
 
 **Zero-Trust PII Scrubbing + Temporal Medical Record Compilation**
 
 Sanitize medical documents locally in your browser. Generate LLM-optimized timelines with content-based deduplication, structured lab extraction, and chronological organization.
 
-[Demo](#demo) • [Features](#features) • [Quick Start](#quick-start) • [Documentation](#documentation)
+**🚀 [Try it Live](https://scrubah-pii.heyoub.dev)** • [Features](#features) • [Quick Start](#quick-start) • [Documentation](#documentation)
 
 </div>
 
