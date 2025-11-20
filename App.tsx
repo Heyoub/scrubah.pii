@@ -24,14 +24,18 @@ const App: React.FC = () => {
   const [files, setFiles] = useState<ProcessedFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [modelLoading, setModelLoading] = useState(false);
+  const [modelError, setModelError] = useState<string | null>(null);
 
   useEffect(() => {
     const initModel = async () => {
       setModelLoading(true);
+      setModelError(null);
       try {
         await piiScrubber.loadModel();
       } catch (e) {
+        const errorMsg = e instanceof Error ? e.message : 'Unknown error loading ML model';
         console.error("Model failed to load", e);
+        setModelError(errorMsg);
       } finally {
         setModelLoading(false);
       }
@@ -118,11 +122,36 @@ const App: React.FC = () => {
     setFiles(prev => prev.map(f => f.id === id ? fullFile : f));
   };
 
+  const handleRetryModelLoad = async () => {
+    setModelLoading(true);
+    setModelError(null);
+    try {
+      await piiScrubber.loadModel();
+    } catch (e) {
+      const errorMsg = e instanceof Error ? e.message : 'Unknown error loading ML model';
+      console.error("Model failed to load", e);
+      setModelError(errorMsg);
+    } finally {
+      setModelLoading(false);
+    }
+  };
+
   const handleClearAll = async () => {
     if (window.confirm("PURGE MEMORY?\nThis will permanently delete all processed files from this session.")) {
       setFiles([]);
       await db.files.clear();
     }
+  };
+
+  const handleDownloadSingle = (file: ProcessedFile) => {
+    if (!file.markdown) return;
+    const blob = new Blob([file.markdown], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Scrubbed_${file.originalName}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleDownloadZip = async () => {
@@ -172,6 +201,11 @@ const App: React.FC = () => {
                             <RefreshCw className="w-3 h-3 animate-spin text-accent-600" />
                             <span className="text-xs font-bold">LOADING_MODEL...</span>
                         </>
+                    ) : modelError ? (
+                        <>
+                             <span className="w-2 h-2 bg-rose-500 rounded-full animate-pulse"></span>
+                             <span className="text-xs font-bold text-rose-600">MODEL_ERROR</span>
+                        </>
                     ) : (
                         <>
                              <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
@@ -197,11 +231,39 @@ const App: React.FC = () => {
             <span className="text-zinc-400">KEEP IT LOCAL.</span>
           </h2>
           <p className="text-lg font-mono text-zinc-600 max-w-2xl leading-relaxed">
-            <span className="bg-black text-white px-1 font-bold mr-1">ZERO-TRUST</span> 
-            pipeline. Scrub Personally Identifiable Information (PII) from contracts, records, and transcripts using on-device AI. 
+            <span className="bg-black text-white px-1 font-bold mr-1">ZERO-TRUST</span>
+            pipeline. Scrub Personally Identifiable Information (PII) from contracts, records, and transcripts using on-device AI.
             Format for LLMs without leaking secrets.
           </p>
         </div>
+
+        {/* Error Banner */}
+        {modelError && (
+          <div className="bg-rose-50 border-2 border-rose-600 p-6 mb-8 animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="flex items-start gap-3">
+              <ShieldAlert className="w-6 h-6 text-rose-600 shrink-0 mt-1" />
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-rose-900 mb-1 uppercase tracking-tight">
+                  ML Model Failed to Load
+                </h3>
+                <p className="text-sm font-mono text-rose-800 mb-3">
+                  {modelError}
+                </p>
+                <p className="text-xs text-rose-700 mb-3">
+                  The app will still work with regex-based PII detection, but ML-powered entity recognition (names, locations, organizations) will be unavailable.
+                </p>
+                <button
+                  onClick={handleRetryModelLoad}
+                  disabled={modelLoading}
+                  className="flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase bg-rose-600 text-white border-2 border-rose-800 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  <RefreshCw className={clsx("w-4 h-4", modelLoading && "animate-spin")} />
+                  Retry Model Load
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Action Area */}
         <DropZone onFilesDropped={handleFilesDropped} isProcessing={isProcessing} />
@@ -234,7 +296,7 @@ const App: React.FC = () => {
           </div>
         )}
 
-        <StatusBoard files={files} />
+        <StatusBoard files={files} onDownload={handleDownloadSingle} />
 
         {/* Footer / Info */}
         <div className="mt-20 border-t-2 border-zinc-200 pt-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 text-zinc-400 font-mono text-xs">
