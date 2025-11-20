@@ -1,0 +1,5 @@
+{
+  "name": "CleanSlate Health",
+  "description": "A secure, local-first medical document scrubber that removes PII using in-browser AI and prepares files for LLM workflows.",
+  "requestFramePermissions": []
+}
