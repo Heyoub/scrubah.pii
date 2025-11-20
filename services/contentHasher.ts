@@ -164,10 +164,13 @@ export const generateFingerprint = async (
 
 /**
  * Compare two documents for duplication
+ * FIXED: Tightened same-event detection to 72-hour window
  */
 export const analyzeDuplication = (
   fingerprint1: DocumentFingerprint,
-  fingerprint2: DocumentFingerprint
+  fingerprint2: DocumentFingerprint,
+  date1?: Date,
+  date2?: Date
 ): DuplicateAnalysis => {
   // Exact duplicate
   if (fingerprint1.contentHash === fingerprint2.contentHash) {
@@ -192,15 +195,19 @@ export const analyzeDuplication = (
     };
   }
 
-  // Same event, different report (same dates, same type, moderate similarity)
-  const sharedDates = fingerprint1.dateReferences.filter(d =>
-    fingerprint2.dateReferences.includes(d)
-  );
+  // Same event, different report (same encounter within 72 hours)
+  // FIXED: Only link documents from the same admission/encounter (within 72 hours)
+  let withinSameEncounter = false;
+  if (date1 && date2) {
+    const timeDiffMs = Math.abs(date1.getTime() - date2.getTime());
+    const hoursDiff = timeDiffMs / (1000 * 60 * 60);
+    withinSameEncounter = hoursDiff <= 72; // 72-hour window for same encounter
+  }
 
   if (
     similarity >= 0.70 &&
     fingerprint1.documentType === fingerprint2.documentType &&
-    sharedDates.length > 0
+    withinSameEncounter
   ) {
     return {
       isDuplicate: false,

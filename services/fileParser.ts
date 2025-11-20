@@ -227,6 +227,11 @@ const convertHtmlToMarkdown = (html: string): string => {
       case 'table': markdown += '\n\n'; break;
       case 'ul': markdown += '\n'; break;
       case 'li': markdown += '\n- '; break;
+      case 'img':
+        // FIXED: Handle embedded images in DOCX files
+        const alt = el.getAttribute('alt') || 'embedded image';
+        markdown += `\n\n> 📷 **[IMAGE: ${alt}]** - Image-only content, manual review may be required for critical findings\n\n`;
+        return; // Don't process children for img tags
     }
 
     if (tagName === 'table') {

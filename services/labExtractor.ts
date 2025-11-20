@@ -22,37 +22,37 @@ export interface LabPanel {
  * Common lab test patterns with their variations
  */
 const LAB_TEST_PATTERNS = {
-  // Complete Blood Count (CBC)
-  WBC: /(?:WBC|White Blood Cell|Leukocyte).*?(\d+\.?\d*)\s*(?:K\/µL|K\/uL|thou\/µL|x10\^3\/µL)/i,
-  RBC: /(?:RBC|Red Blood Cell|Erythrocyte).*?(\d+\.?\d*)\s*(?:M\/µL|M\/uL|mill\/µL|x10\^6\/µL)/i,
-  HGB: /(?:HGB|Hemoglobin|Hgb).*?(\d+\.?\d*)\s*(?:g\/dL|gm\/dL)/i,
-  HCT: /(?:HCT|Hematocrit).*?(\d+\.?\d*)\s*(?:%|percent)/i,
-  PLT: /(?:PLT|Platelet|Thrombocyte).*?(\d+\.?\d*)\s*(?:K\/µL|K\/uL|thou\/µL)/i,
+  // Complete Blood Count (CBC) - Fixed: Use word boundaries and proper decimal capture
+  WBC: /(?:WBC|White Blood Cell|Leukocyte)[:\s]*(\d+(?:\.\d+)?)\s*(?:K\/µL|K\/uL|thou\/µL|x10\^3\/µL)/i,
+  RBC: /(?:RBC|Red Blood Cell|Erythrocyte)[:\s]*(\d+(?:\.\d+)?)\s*(?:M\/µL|M\/uL|mill\/µL|x10\^6\/µL)/i,
+  HGB: /(?:HGB|Hemoglobin|Hgb)[:\s]*(\d+(?:\.\d+)?)\s*(?:g\/dL|gm\/dL)/i,
+  HCT: /(?:HCT|Hematocrit)[:\s]*(\d+(?:\.\d+)?)\s*(?:%|percent)/i,
+  PLT: /(?:PLT|Platelet|Thrombocyte)[:\s]*(\d+(?:\.\d+)?)\s*(?:K\/µL|K\/uL|thou\/µL)/i,
 
   // Comprehensive Metabolic Panel (CMP)
-  GLUCOSE: /(?:GLU|Glucose|Blood Sugar).*?(\d+\.?\d*)\s*(?:mg\/dL)/i,
-  SODIUM: /(?:NA|Sodium|Na\+).*?(\d+\.?\d*)\s*(?:mEq\/L|mmol\/L)/i,
-  POTASSIUM: /(?:K|Potassium|K\+).*?(\d+\.?\d*)\s*(?:mEq\/L|mmol\/L)/i,
-  CHLORIDE: /(?:CL|Chloride|Cl-).*?(\d+\.?\d*)\s*(?:mEq\/L|mmol\/L)/i,
-  BUN: /(?:BUN|Blood Urea Nitrogen).*?(\d+\.?\d*)\s*(?:mg\/dL)/i,
-  CREATININE: /(?:CRT|Creatinine|Cr).*?(\d+\.?\d*)\s*(?:mg\/dL)/i,
-  CALCIUM: /(?:CA|Calcium).*?(\d+\.?\d*)\s*(?:mg\/dL|mmol\/L)/i,
+  GLUCOSE: /(?:GLU|Glucose|Blood Sugar)[:\s]*(\d+(?:\.\d+)?)\s*(?:mg\/dL)/i,
+  SODIUM: /(?:NA|Sodium|Na\+)[:\s]*(\d+(?:\.\d+)?)\s*(?:mEq\/L|mmol\/L)/i,
+  POTASSIUM: /(?:K|Potassium|K\+)[:\s]*(\d+(?:\.\d+)?)\s*(?:mEq\/L|mmol\/L)/i,
+  CHLORIDE: /(?:CL|Chloride|Cl-)[:\s]*(\d+(?:\.\d+)?)\s*(?:mEq\/L|mmol\/L)/i,
+  BUN: /(?:BUN|Blood Urea Nitrogen)[:\s]*(\d+(?:\.\d+)?)\s*(?:mg\/dL)/i,
+  CREATININE: /(?:CRT|Creatinine|Cr)[:\s]*(\d+(?:\.\d+)?)\s*(?:mg\/dL)/i,
+  CALCIUM: /(?:CA|Calcium)[:\s]*(\d+(?:\.\d+)?)\s*(?:mg\/dL|mmol\/L)/i,
 
   // Liver Function Tests
-  ALT: /(?:ALT|SGPT|Alanine Aminotransferase).*?(\d+\.?\d*)\s*(?:U\/L|IU\/L)/i,
-  AST: /(?:AST|SGOT|Aspartate Aminotransferase).*?(\d+\.?\d*)\s*(?:U\/L|IU\/L)/i,
-  ALP: /(?:ALP|Alkaline Phosphatase).*?(\d+\.?\d*)\s*(?:U\/L|IU\/L)/i,
-  BILIRUBIN: /(?:BILT|Bilirubin|Total Bili).*?(\d+\.?\d*)\s*(?:mg\/dL)/i,
+  ALT: /(?:ALT|SGPT|Alanine Aminotransferase)[:\s]*(\d+(?:\.\d+)?)\s*(?:U\/L|IU\/L)/i,
+  AST: /(?:AST|SGOT|Aspartate Aminotransferase)[:\s]*(\d+(?:\.\d+)?)\s*(?:U\/L|IU\/L)/i,
+  ALP: /(?:ALP|Alkaline Phosphatase)[:\s]*(\d+(?:\.\d+)?)\s*(?:U\/L|IU\/L)/i,
+  BILIRUBIN: /(?:BILT|Bilirubin|Total Bili)[:\s]*(\d+(?:\.\d+)?)\s*(?:mg\/dL)/i,
 
   // Cardiac Markers
-  TROPONIN: /(?:Troponin|Trop|HS-Troponin).*?(\d+\.?\d*)\s*(?:ng\/mL)/i,
-  BNP: /(?:BNP|Brain Natriuretic Peptide).*?(\d+\.?\d*)\s*(?:pg\/mL)/i,
+  TROPONIN: /(?:Troponin|Trop|HS-Troponin)[:\s]*(\d+(?:\.\d+)?)\s*(?:ng\/mL)/i,
+  BNP: /(?:BNP|Brain Natriuretic Peptide)[:\s]*(\d+(?:\.\d+)?)\s*(?:pg\/mL)/i,
 
   // Lipid Panel
-  CHOLESTEROL: /(?:Total Cholesterol|CHOL).*?(\d+\.?\d*)\s*(?:mg\/dL)/i,
-  HDL: /(?:HDL|High Density Lipoprotein).*?(\d+\.?\d*)\s*(?:mg\/dL)/i,
-  LDL: /(?:LDL|Low Density Lipoprotein).*?(\d+\.?\d*)\s*(?:mg\/dL)/i,
-  TRIGLYCERIDES: /(?:Triglycerides|TRIG).*?(\d+\.?\d*)\s*(?:mg\/dL)/i,
+  CHOLESTEROL: /(?:Total Cholesterol|CHOL)[:\s]*(\d+(?:\.\d+)?)\s*(?:mg\/dL)/i,
+  HDL: /(?:HDL|High Density Lipoprotein)[:\s]*(\d+(?:\.\d+)?)\s*(?:mg\/dL)/i,
+  LDL: /(?:LDL|Low Density Lipoprotein)[:\s]*(\d+(?:\.\d+)?)\s*(?:mg\/dL)/i,
+  TRIGLYCERIDES: /(?:Triglycerides|TRIG)[:\s]*(\d+(?:\.\d+)?)\s*(?:mg\/dL)/i,
 };
 
 /**

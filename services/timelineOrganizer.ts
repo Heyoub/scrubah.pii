@@ -120,11 +120,15 @@ export const extractPrimaryDate = (filename: string, content: string): Date => {
 
 /**
  * Build master timeline from processed documents
+ * @param files - Processed medical documents
+ * @param options - Configuration options (reverseChronological: newest first for quick updates)
  */
 export const buildMasterTimeline = async (
-  files: ProcessedFile[]
+  files: ProcessedFile[],
+  options?: { reverseChronological?: boolean }
 ): Promise<MasterTimeline> => {
-  console.log('🗓️ Building master timeline...');
+  const reverseOrder = options?.reverseChronological || false;
+  console.log(`🗓️ Building master timeline (${reverseOrder ? 'newest → oldest' : 'oldest → newest'})...`);
 
   // Step 1: Generate fingerprints and temporal data
   const timelineDocuments: TimelineDocument[] = [];
@@ -156,8 +160,13 @@ export const buildMasterTimeline = async (
     });
   }
 
-  // Step 2: Sort chronologically (oldest first for narrative coherence)
-  timelineDocuments.sort((a, b) => a.date.getTime() - b.date.getTime());
+  // Step 2: Sort chronologically
+  // FIXED: Support reverse chronological (newest first) for quick updates
+  if (reverseOrder) {
+    timelineDocuments.sort((a, b) => b.date.getTime() - a.date.getTime());
+  } else {
+    timelineDocuments.sort((a, b) => a.date.getTime() - b.date.getTime());
+  }
 
   // Assign document numbers
   timelineDocuments.forEach((doc, idx) => {
@@ -174,7 +183,9 @@ export const buildMasterTimeline = async (
 
       const duplicationInfo = analyzeDuplication(
         currentDoc.fingerprint,
-        previousDoc.fingerprint
+        previousDoc.fingerprint,
+        currentDoc.date,
+        previousDoc.date
       );
 
       // If duplicate found, mark it
@@ -189,7 +200,7 @@ export const buildMasterTimeline = async (
   const summary = generateSummary(timelineDocuments);
 
   // Step 5: Generate optimized markdown
-  const markdown = generateTimelineMarkdown(timelineDocuments, summary);
+  const markdown = generateTimelineMarkdown(timelineDocuments, summary, reverseOrder);
 
   console.log(`✅ Timeline built: ${summary.totalDocuments} docs, ${summary.uniqueDocuments} unique`);
 
@@ -234,9 +245,11 @@ const generateSummary = (documents: TimelineDocument[]): TimelineSummary => {
  */
 const generateTimelineMarkdown = (
   documents: TimelineDocument[],
-  summary: TimelineSummary
+  summary: TimelineSummary,
+  reverseChronological: boolean = false
 ): string => {
   const sections: string[] = [];
+  const sortDirection = reverseChronological ? 'newest → oldest' : 'oldest → newest';
 
   // Header
   sections.push('# 🏥 Medical Record Timeline\n');
@@ -254,7 +267,7 @@ const generateTimelineMarkdown = (
 
   // Timeline sections
   sections.push('## 📅 Chronological Timeline\n');
-  sections.push('_Documents are ordered chronologically (oldest → newest) for temporal analysis._\n');
+  sections.push(`_Documents are ordered chronologically (${sortDirection}) for temporal analysis._\n`);
 
   // Track previous lab results for trend analysis
   let previousLabPanel: LabPanel | undefined;
@@ -303,8 +316,19 @@ const generateTimelineMarkdown = (
       sections.push('```\n' + doc.content + '\n```\n');
       sections.push('</details>\n');
     } else {
-      // Non-lab documents: full content
-      sections.push(doc.content + '\n');
+      // Non-lab documents: Truncate long content for cognitive load reduction
+      // FIXED: Limit to 50 lines to prevent overwhelming output
+      const lines = doc.content.split('\n');
+      const MAX_LINES = 50;
+
+      if (lines.length > MAX_LINES) {
+        const truncatedContent = lines.slice(0, MAX_LINES).join('\n');
+        const remainingLines = lines.length - MAX_LINES;
+        sections.push(truncatedContent + '\n');
+        sections.push(`\n> ⚠️ **Content truncated** - ${remainingLines} additional lines omitted for readability. Full document available in source files.\n`);
+      } else {
+        sections.push(doc.content + '\n');
+      }
     }
 
     sections.push('\n---\n');
