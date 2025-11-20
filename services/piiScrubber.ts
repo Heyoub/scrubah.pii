@@ -13,9 +13,42 @@ const PATTERNS = {
   PHONE: /(?:\+?1[-. ]?)?\(?([0-9]{3})\)?[-. ]?([0-9]{3})[-. ]?([0-9]{4})/g,
   SSN: /\b\d{3}-\d{2}-\d{4}\b/g,
   DATE: /\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b/g,
-  // Simple MRN heuristic (Sequence of 6+ digits often MRN in medical context if isolated)
-  MRN: /\b\d{6,9}\b/g 
+  // Context-aware MRN detection
+  CREDIT_CARD: /\b(?:\d{4}[-\s]?){3}\d{4}\b/g,
+  ZIPCODE: /\b\d{5}(?:-\d{4})?\b/g
 };
+
+// Context-aware MRN detector
+const MRN_CONTEXT_KEYWORDS = [
+  'MRN', 'Medical Record Number', 'Patient ID', 'Patient Number',
+  'Record Number', 'Chart Number', 'Account Number', 'Member ID'
+];
+
+const detectContextualMRN = (text: string): { start: number; end: number; value: string }[] => {
+  const matches: { start: number; end: number; value: string }[] = [];
+
+  // Look for MRN with context (e.g., "MRN: 1234567")
+  const contextPattern = new RegExp(
+    `(${MRN_CONTEXT_KEYWORDS.join('|')})[:\\s]+([A-Z0-9]{6,12})\\b`,
+    'gi'
+  );
+
+  let match;
+  while ((match = contextPattern.exec(text)) !== null) {
+    const mrnValue = match[2];
+    const start = match.index + match[1].length + (match[0].length - match[1].length - mrnValue.length);
+    matches.push({
+      start,
+      end: start + mrnValue.length,
+      value: mrnValue
+    });
+  }
+
+  return matches;
+};
+
+// Export for testing
+export { detectContextualMRN, PATTERNS, MRN_CONTEXT_KEYWORDS };
 
 class PiiScrubberService {
   private static instance: PiiScrubberService;
@@ -90,6 +123,21 @@ class PiiScrubberService {
     runRegex('EMAIL', PATTERNS.EMAIL, 'EMAIL');
     runRegex('PHONE', PATTERNS.PHONE, 'PHONE');
     runRegex('ID', PATTERNS.SSN, 'SSN');
+    runRegex('ID', PATTERNS.CREDIT_CARD, 'CARD');
+    runRegex('ID', PATTERNS.ZIPCODE, 'ZIP');
+
+    // Context-aware MRN detection
+    const mrnMatches = detectContextualMRN(interimText);
+    mrnMatches.reverse().forEach(({ start, end, value }) => {
+      if (!entityToPlaceholder[value]) {
+        counters.ID++;
+        const placeholder = `[MRN_${counters.ID}]`;
+        entityToPlaceholder[value] = placeholder;
+        globalReplacements[value] = placeholder;
+        totalReplacements++;
+      }
+      interimText = interimText.substring(0, start) + entityToPlaceholder[value] + interimText.substring(end);
+    });
     
     // --- PHASE 2: SMART CHUNKING ---
     // Split by sentences to preserve context for BERT, but group them to maximize chunk size
