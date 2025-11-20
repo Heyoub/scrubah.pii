@@ -1,0 +1,55 @@
+{
+  "name": "scrubah-pii",
+  "version": "1.0.0",
+  "description": "Forensic medical data sanitizer - Zero-trust PII scrubbing + LLM-optimized timeline generation",
+  "author": "Heyoub <hello@forgestack.app>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Heyoub/scrubah-pii.git"
+  },
+  "keywords": [
+    "medical",
+    "pii-scrubbing",
+    "hipaa",
+    "deidentification",
+    "healthcare-ai",
+    "wasm",
+    "local-first"
+  ],
+  "private": true,
+  "dependencies": {
+    "@huggingface/transformers": "^3.0.0",
+    "clsx": "^2.1.0",
+    "date-fns": "^4.1.0",
+    "dexie": "^3.2.4",
+    "jszip": "^3.10.1",
+    "lucide-react": "^0.344.0",
+    "mammoth": "^1.7.1",
+    "pdfjs-dist": "^4.0.379",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "tailwind-merge": "^2.2.1",
+    "tesseract.js": "^5.0.4"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.1.5",
+    "@testing-library/react": "^14.0.0",
+    "@testing-library/user-event": "^14.5.1",
+    "@types/jest": "^29.5.11",
+    "@vitejs/plugin-react": "^5.1.1",
+    "@vitest/ui": "^1.1.0",
+    "jsdom": "^23.0.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.4",
+    "vitest": "^1.1.0"
+  },
+  "scripts": {
+    "start": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage"
+  }
+}

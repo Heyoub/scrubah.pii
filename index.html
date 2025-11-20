@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Scrubah.PII | Zero-Trust Sanitizer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['"Space Grotesk"', 'sans-serif'],
+              mono: ['"JetBrains Mono"', 'monospace'],
+            },
+            colors: {
+              zinc: {
+                850: '#1e293b',
+                900: '#18181b',
+                950: '#09090b',
+              },
+              accent: {
+                400: '#6366f1', // Indigo
+                500: '#4f46e5',
+                600: '#4338ca',
+              }
+            },
+            boxShadow: {
+              'hard': '4px 4px 0px 0px rgba(0,0,0,1)',
+              'hard-sm': '2px 2px 0px 0px rgba(0,0,0,1)',
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+      }
+      .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+      }
+      /* Neo-brutalist utility */
+      .neo-border {
+        border: 2px solid #000;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "jszip": "https://aistudiocdn.com/jszip@^3.10.1",
+    "clsx": "https://aistudiocdn.com/clsx@^2.1.1",
+    "dexie": "https://aistudiocdn.com/dexie@^4.2.1",
+    "mammoth": "https://aistudiocdn.com/mammoth@^1.11.0",
+    "pdfjs-dist": "https://aistudiocdn.com/pdfjs-dist@^5.4.394",
+    "@huggingface/transformers": "https://aistudiocdn.com/@huggingface/transformers@^3.8.0",
+    "pdfjs-dist/": "https://aistudiocdn.com/pdfjs-dist@^5.4.394/",
+    "tesseract.js": "https://aistudiocdn.com/tesseract.js@^5.1.0"
+  }
+}
+</script>
+</head>
+  <body class="bg-[#f8f8f8] text-zinc-900 antialiased selection:bg-black selection:text-white">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
