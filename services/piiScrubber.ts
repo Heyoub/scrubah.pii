@@ -430,7 +430,35 @@ class PiiScrubberService {
         additionalReplacements[match] = placeholder;
         additionalCount++;
       }
-      validatedText = validatedText.replace(new RegExp(match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), entityToPlaceholder[match]);
+      const regex = VALIDATION_PATTERNS.CAPITALIZED_SEQUENCE;
+      let currentMatch;
+      // Reset lastIndex for exec loop
+      regex.lastIndex = 0;
+      const replacements = [];
+      while ((currentMatch = regex.exec(validatedText)) !== null) {
+        const match = currentMatch[0];
+        if (isPlaceholder(match) || isWhitelisted(match)) continue;
+
+        const words = match.split(/\s+/);
+        if (words.every(w => isWhitelisted(w))) continue;
+
+        if (!entityToPlaceholder[match]) {
+          counters.PER++;
+          const placeholder = `[PER_${counters.PER}]`;
+          entityToPlaceholder[match] = placeholder;
+          globalReplacements[match] = placeholder;
+          additionalReplacements[match] = placeholder;
+          additionalCount++;
+        }
+  
+        replacements.push({ start: currentMatch.index, end: currentMatch.index + match.length, placeholder: entityToPlaceholder[match] });
+      }
+
+      // Apply replacements from end to start to avoid index shifting
+      for (let i = replacements.length - 1; i >= 0; i--) {
+        const { start, end, placeholder } = replacements[i];
+        validatedText = validatedText.substring(0, start) + placeholder + validatedText.substring(end);
+      }
     }
 
     // 2. Catch remaining numeric IDs
