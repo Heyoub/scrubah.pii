@@ -206,7 +206,7 @@ const parsePDFPage = (
     }
 
     // Digital text extraction (advanced layout analysis)
-    const lines: PDFAggregatedLine[] = [];
+    let lines: PDFAggregatedLine[] = [];
 
     for (const item of textContent.items) {
       if (!("str" in item)) continue;
