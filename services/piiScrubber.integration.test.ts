@@ -366,11 +366,11 @@ Payment Card: 4532-1234-5678-9010
       const text = 'Email1: a@b.com, Email2: c@d.com, Same: a@b.com';
       const result = await piiScrubber.scrub(text);
 
-      // Should have 2 unique emails
+      // Should have 2 unique emails in replacements map
       expect(Object.keys(result.replacements).length).toBe(2);
 
-      // There are 3 occurrences, but only 2 unique emails
-      expect(result.count).toBe(2); // count is unique entities, not occurrences
+      // Count should equal unique entities (2), not total occurrences (3)
+      expect(result.count).toBe(2); // count tracks unique entities
 
       // Same email should have same placeholder
       const placeholderForA = result.replacements['a@b.com'];
