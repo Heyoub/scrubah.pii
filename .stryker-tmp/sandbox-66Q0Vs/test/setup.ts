@@ -1,0 +1,58 @@
+// @ts-nocheck
+import { expect, afterEach, vi } from 'vitest';
+import { cleanup } from '@testing-library/react';
+import '@testing-library/jest-dom';
+
+// Cleanup after each test
+afterEach(() => {
+  cleanup();
+});
+
+// Mock Intl.Segmenter for environments that don't support it
+if (typeof Intl.Segmenter === 'undefined') {
+  // 
+  global.Intl.Segmenter = class Segmenter {
+    constructor(locale: string, options: any) {}
+    segment(text: string) {
+      // Simple fallback: split by sentence-ending punctuation
+      const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+      return sentences.map((segment: string) => ({ segment }));
+    }
+  };
+}
+
+// Mock crypto.randomUUID for deterministic tests
+if (typeof crypto === 'undefined' || !crypto.randomUUID) {
+  let idCounter = 0;
+  global.crypto = {
+    ...global.crypto,
+    randomUUID: () => {
+      idCounter++;
+      return `test-uuid-${idCounter.toString().padStart(8, '0')}`;
+    },
+  } as Crypto;
+}
+
+// Polyfill File.prototype.text() for JSDOM
+if (typeof File !== 'undefined' && !File.prototype.text) {
+  File.prototype.text = async function() {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsText(this);
+    });
+  };
+}
+
+// Polyfill File.prototype.arrayBuffer() for JSDOM
+if (typeof File !== 'undefined' && !File.prototype.arrayBuffer) {
+  File.prototype.arrayBuffer = async function() {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(this);
+    });
+  };
+}

@@ -1,0 +1,48 @@
+
+> scrubah-pii@1.0.0 test:mutation
+> stryker run
+
+[32m14:30:21 (5984) INFO ProjectReader[39m No incremental result file found at .stryker-tmp/incremental.json, a full mutation testing run will be performed.
+[32m14:30:21 (5984) INFO ProjectReader[39m Found 1 of 69 file(s) to be mutated.
+[32m14:30:22 (5984) INFO Instrumenter[39m Instrumented 1 source file(s) with 257 mutant(s)
+[32m14:30:22 (5984) INFO ConcurrencyTokenProvider[39m Creating 6 checker process(es) and 5 test runner process(es).
+[32m14:31:35 (5984) INFO BroadcastReporter[39m Detected that current console does not support the "progress" reporter, downgrading to "progress-append-only" reporter
+[32m14:31:35 (5984) INFO DryRunExecutor[39m Starting initial test run (command test runner with "off" coverage analysis). This may take a while.
+[91m14:31:36 (5984) ERROR DryRunExecutor[39m One or more tests failed in the initial test run:
+	All tests
+		
+> scrubah-pii@1.0.0 test
+> vitest --run services/compression/compression.test.ts services/compression/schema.test.ts services/compression/yaml.test.ts --exclude services/piiScrubber.integration.test.ts --exclude services/piiScrubber.secure.test.ts
+
+
+file:///C:/Users/eayou/Downloads/scrubah.pii-claude-review-app-functionality-01VuuqdCemr7SV7vKdVKUb14/scrubah.pii-claude-review-app-functionality-01VuuqdCemr7SV7vKdVKUb14/node_modules/vitest/dist/vendor/cac.cdAtVkJZ.js:1262
+      throw new Error(
+            ^
+
+Error: Expected a single value for option "--exclude <glob>", received ["services/piiScrubber.integration.test.ts", "services/piiScrubber.secure.test.ts"]
+    at transform (file:///C:/Users/eayou/Downloads/scrubah.pii-claude-review-app-functionality-01VuuqdCemr7SV7vKdVKUb14/scrubah.pii-claude-review-app-functionality-01VuuqdCemr7SV7vKdVKUb14/node_modules/vitest/dist/vendor/cac.cdAtVkJZ.js:1262:13)
+    at setDotProp (file:///C:/Users/eayou/Downloads/scrubah.pii-claude-review-app-functionality-01VuuqdCemr7SV7vKdVKUb14/scrubah.pii-claude-review-app-functionality-01VuuqdCemr7SV7vKdVKUb14/node_modules/vitest/dist/vendor/cac.cdAtVkJZ.js:206:22)
+    at CAC.mri (file:///C:/Users/eayou/Downloads/scrubah.pii-claude-review-app-functionality-01VuuqdCemr7SV7vKdVKUb14/scrubah.pii-claude-review-app-functionality-01VuuqdCemr7SV7vKdVKUb14/node_modules/vitest/dist/vendor/cac.cdAtVkJZ.js:590:9)
+    at CAC.parse (file:///C:/Users/eayou/Downloads/scrubah.pii-claude-review-app-functionality-01VuuqdCemr7SV7vKdVKUb14/scrubah.pii-claude-review-app-functionality-01VuuqdCemr7SV7vKdVKUb14/node_modules/vitest/dist/vendor/cac.cdAtVkJZ.js:507:27)
+    at file:///C:/Users/eayou/Downloads/scrubah.pii-claude-review-app-functionality-01VuuqdCemr7SV7vKdVKUb14/scrubah.pii-claude-review-app-functionality-01VuuqdCemr7SV7vKdVKUb14/node_modules/vitest/dist/cli.js:9:13
+    at ModuleJob.run (node:internal/modules/esm/module_job:271:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:547:26)
+    at async main (file:///C:/Users/eayou/Downloads/scrubah.pii-claude-review-app-functionality-01VuuqdCemr7SV7vKdVKUb14/scrubah.pii-claude-review-app-functionality-01VuuqdCemr7SV7vKdVKUb14/node_modules/vitest/dist/cli-wrapper.js:45:5)
+
+Node.js v22.12.0
+
+[91m14:31:36 (5984) ERROR Stryker[39m There were failed tests in the initial test run.
+file:///C:/Users/eayou/Downloads/scrubah.pii-claude-review-app-functionality-01VuuqdCemr7SV7vKdVKUb14/scrubah.pii-claude-review-app-functionality-01VuuqdCemr7SV7vKdVKUb14/node_modules/@stryker-mutator/core/dist/src/process/3-dry-run-executor.js:65
+                    throw new ConfigError('There were failed tests in the initial test run.');
+                          ^
+
+ConfigError: There were failed tests in the initial test run.
+    at DryRunExecutor.validateResultCompleted (file:///C:/Users/eayou/Downloads/scrubah.pii-claude-review-app-functionality-01VuuqdCemr7SV7vKdVKUb14/scrubah.pii-claude-review-app-functionality-01VuuqdCemr7SV7vKdVKUb14/node_modules/@stryker-mutator/core/dist/src/process/3-dry-run-executor.js:65:27)
+    at DryRunExecutor.executeDryRun (file:///C:/Users/eayou/Downloads/scrubah.pii-claude-review-app-functionality-01VuuqdCemr7SV7vKdVKUb14/scrubah.pii-claude-review-app-functionality-01VuuqdCemr7SV7vKdVKUb14/node_modules/@stryker-mutator/core/dist/src/process/3-dry-run-executor.js:96:14)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async WorkItem.execute (file:///C:/Users/eayou/Downloads/scrubah.pii-claude-review-app-functionality-01VuuqdCemr7SV7vKdVKUb14/scrubah.pii-claude-review-app-functionality-01VuuqdCemr7SV7vKdVKUb14/node_modules/@stryker-mutator/core/dist/src/concurrent/pool.js:32:28)
+    at async file:///C:/Users/eayou/Downloads/scrubah.pii-claude-review-app-functionality-01VuuqdCemr7SV7vKdVKUb14/scrubah.pii-claude-review-app-functionality-01VuuqdCemr7SV7vKdVKUb14/node_modules/@stryker-mutator/core/dist/src/concurrent/pool.js:69:13 {
+  innerError: undefined
+}
+
+Node.js v22.12.0
