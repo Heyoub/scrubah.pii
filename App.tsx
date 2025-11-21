@@ -257,8 +257,10 @@ const App: React.FC = () => {
       const a = document.createElement("a");
       a.href = url;
       a.download = `Compressed_Timeline_${new Date().toISOString().split('T')[0]}.yaml`;
+      document.body.appendChild(a); // Append to body for better browser compatibility
       a.click();
-      URL.revokeObjectURL(url);
+      document.body.removeChild(a); // Clean up the element
+      setTimeout(() => URL.revokeObjectURL(url), 100); // Revoke after a short delay
 
       console.log('✅ Timeline compressed successfully!');
       console.log(`📊 Compression: ${result.timeline.compressionMetadata.originalSizeKb.toFixed(2)}KB → ${result.timeline.compressionMetadata.compressedSizeKb.toFixed(2)}KB (${(result.timeline.compressionMetadata.ratio * 100).toFixed(1)}%)`);
