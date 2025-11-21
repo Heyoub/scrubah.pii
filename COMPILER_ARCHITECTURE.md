@@ -91,8 +91,8 @@ Output: Patient: [PER_1], DOB: [DATE_1], [ADDR_1], [LOC_1], [ZIP_1]
 
 2. **Heuristic Detection**
    ```typescript
-   CAPITALIZED_SEQUENCE: /\b[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})+\b/g
-   // Catches: "Mary Johnson", "Robert Williams"
+   CAPITALIZED_SEQUENCE: /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/g
+   // Catches: "Mary Johnson", "Robert Williams", "Bo Li"
 
    NUMERIC_ID: /\b[A-Z]{0,3}\d{6,12}\b/g
    // Catches: "ABC123456", "7890123456"
