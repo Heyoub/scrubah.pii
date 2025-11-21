@@ -90,7 +90,7 @@ const extractEventsFromDocument = (
   doc: ProcessedDocument,
   errorCollector: ErrorCollector
 ): Effect.Effect<TimelineEntry[], never, never> => {
-  return Effect.gen(function* (_) {
+  return Effect.sync(() => {
     const events: TimelineEntry[] = [];
 
     try {
@@ -183,14 +183,15 @@ const parseDate = (
       const day = parseInt(parts[1], 10);
       const year = parseInt(parts[2], 10);
 
-      // Validate ranges by attempting to construct a Date object
+      // Construct date and validate (catches JS normalization like Feb 30 -> Mar 2)
       const date = new Date(year, month - 1, day);
       if (
         isNaN(date.getTime()) ||
         date.getFullYear() !== year ||
         date.getMonth() !== month - 1 ||
         date.getDate() !== day ||
-        year < 1900 || year > 2100
+        year < 1900 ||
+        year > 2100
       ) {
         errorCollector.add(
           new ParseError({
@@ -221,10 +222,7 @@ const parseDate = (
         );
       }
 
-      const date = new Date(year, month - 1, day);
-      if (!isNaN(date.getTime())) {
-        return date;
-      }
+      return date;
     }
   } catch (error) {
     errorCollector.add(
@@ -251,7 +249,7 @@ const deduplicateEvents = (
   aggressive: boolean,
   errorCollector: ErrorCollector
 ): Effect.Effect<TimelineEntry[], never, never> => {
-  return Effect.gen(function* (_) {
+  return Effect.sync(() => {
     const seen = new Map<string, TimelineEntry>();
     const deduplicated: TimelineEntry[] = [];
 
@@ -337,7 +335,7 @@ const compressToTargetSize = (
   targetSizeKb: number,
   errorCollector: ErrorCollector
 ): Effect.Effect<TimelineEntry[], never, never> => {
-  return Effect.gen(function* (_) {
+  return Effect.sync(() => {
     let compressed = [...events];
 
     // Estimate YAML size (100 bytes per event for realistic compression)
@@ -375,7 +373,7 @@ const buildCompressedTimeline = (
   originalEventsCount: number,
   options: CompressionOptions
 ): Effect.Effect<CompressedTimeline, never, never> => {
-  return Effect.gen(function* (_) {
+  return Effect.sync(() => {
     // Calculate date range (handle empty events array)
     const now = new Date();
     const dateRange: DateRange = events.length > 0 ? {
