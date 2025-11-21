@@ -15,6 +15,7 @@ The PII scrubbing system now uses a **compiler-like architecture** with multiple
 ## Compiler Analogy
 
 ### Traditional Compiler Phases
+
 ```
 Source Code
     ↓
@@ -30,6 +31,7 @@ Source Code
 ```
 
 ### PII Scrubbing "Compiler" Phases
+
 ```
 Raw Medical Document
     ↓
@@ -49,9 +51,11 @@ Scrubbed Document + Confidence Score
 ## Multi-Pass Architecture
 
 ### PASS 1: Primary Scrubbing (Lexical + Syntactic)
+
 **Purpose:** Identify and replace known PII patterns with high precision
 
 **Techniques:**
+
 1. **Regex-Based Structural Detection** (like lexical tokenization)
    - Email addresses
    - Phone numbers
@@ -74,6 +78,7 @@ Scrubbed Document + Confidence Score
 **Output:** Text with primary PII replaced by placeholders
 
 **Example:**
+
 ```
 Input:  Patient: John Smith, DOB: 01/15/1985, 123 Main St, Boston, MA
 Output: Patient: [PER_1], DOB: [DATE_1], [ADDR_1], [LOC_1], [ZIP_1]
@@ -82,14 +87,17 @@ Output: Patient: [PER_1], DOB: [DATE_1], [ADDR_1], [LOC_1], [ZIP_1]
 ---
 
 ### PASS 2: Secondary Validation (Optimization Pass 1)
+
 **Purpose:** Catch edge cases and patterns that slipped through Pass 1
 
 **Techniques:**
+
 1. **Broader Pattern Matching**
    - More aggressive regex patterns
    - Lower specificity, higher recall
 
 2. **Heuristic Detection**
+
    ```typescript
    CAPITALIZED_SEQUENCE: /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/g
    // Catches: "Mary Johnson", "Robert Williams", "Bo Li"
@@ -116,6 +124,7 @@ Output: Patient: [PER_1], DOB: [DATE_1], [ADDR_1], [LOC_1], [ZIP_1]
    - Prevents over-scrubbing
 
 **Whitelist Examples:**
+
 ```typescript
 ['January', 'February', 'Doctor', 'Patient', 'Hospital',
  'Blood', 'Heart', 'Normal', 'Abnormal', 'Emergency', ...]
@@ -124,6 +133,7 @@ Output: Patient: [PER_1], DOB: [DATE_1], [ADDR_1], [LOC_1], [ZIP_1]
 **Output:** Further scrubbed text with additional placeholders
 
 **Example:**
+
 ```
 Input:  Emergency visit on March 15. Patient Sarah Davis arrived.
 Pass 1: Emergency visit on [DATE_1]. Patient Sarah Davis arrived.
@@ -133,9 +143,11 @@ Pass 2: Emergency visit on [DATE_1]. Patient [PER_2] arrived.
 ---
 
 ### PASS 3: Verification (Optimization Pass 2)
+
 **Purpose:** Final check for any remaining suspicious patterns
 
 **Techniques:**
+
 1. **Pattern Scanning**
    - Re-run all validation patterns
    - Identify any remaining matches
@@ -147,6 +159,7 @@ Pass 2: Emergency visit on [DATE_1]. Patient [PER_2] arrived.
    - Flag email/phone/date-like patterns
 
 3. **Quality Metrics**
+
    ```typescript
    suspiciousMatches: [
      'Capitalized sequence (potential name): "Jennifer White"',
@@ -160,9 +173,11 @@ Pass 2: Emergency visit on [DATE_1]. Patient [PER_2] arrived.
 ---
 
 ### PASS 4: Confidence Scoring (Code Generation)
+
 **Purpose:** Calculate confidence that ALL PII has been removed
 
 **Scoring Algorithm:**
+
 ```typescript
 confidenceScore = 100% - (penalty based on suspicious matches)
 
@@ -176,6 +191,7 @@ confidenceScore = 100% - (penalty based on suspicious matches)
 **Output:** Final scrubbed text + confidence score
 
 **Console Output:**
+
 ```
 ✅ Pass 1 (Primary) complete: 12 entities redacted
 🔍 Running Pass 2 (Validation)...
@@ -191,23 +207,28 @@ Suspicious matches: ['Capitalized sequence: "General Hospital"', ...]
 ## Achieving 100% Confidence
 
 ### When We Achieve 100%
+
 - ✅ No suspicious patterns detected in verification pass
 - ✅ All regex patterns passed without matches
 - ✅ All detected entities have been whitelisted as safe terms
 - ✅ Document structure preserved with only placeholders remaining
 
 ### When Confidence < 100%
+
 **95-99% Confidence:**
+
 - A few ambiguous terms remain (e.g., "General Hospital")
 - Likely organization names or locations
 - May need manual review
 
 **90-94% Confidence:**
+
 - Several capitalized sequences or numeric IDs remain
 - Could be names or medical record numbers
 - Recommend manual audit
 
 **<90% Confidence:**
+
 - Significant suspicious patterns remain
 - High risk of PII leakage
 - **Requires immediate manual review**
@@ -217,6 +238,7 @@ Suspicious matches: ['Capitalized sequence: "General Hospital"', ...]
 ## Comparison: Before vs. After Multi-Pass
 
 ### Single-Pass System (Before)
+
 ```
 Primary Scrubbing (Regex + ML)
     ↓
@@ -224,12 +246,14 @@ Output (95% confidence)
 ```
 
 **Issues:**
+
 - Edge cases slip through
 - No validation layer
 - No confidence metric
 - False negatives possible
 
 ### Multi-Pass System (After)
+
 ```
 Pass 1: Primary Scrubbing (Regex + ML)
     ↓
@@ -243,6 +267,7 @@ Output (98-100% confidence with audit trail)
 ```
 
 **Benefits:**
+
 - ✅ Multiple safety nets
 - ✅ Catches edge cases
 - ✅ Quantified confidence
@@ -256,6 +281,7 @@ Output (98-100% confidence with audit trail)
 ### Code Structure
 
 **services/piiScrubber.ts:**
+
 ```typescript
 class PiiScrubberService {
   // PASS 1: Primary Scrubbing
@@ -309,18 +335,21 @@ const validation = verifyNoSuspiciousPII(pass2Result.text)
 ## Performance Considerations
 
 ### Time Complexity
+
 - **Pass 1 (Primary):** O(n) for regex, O(n * m) for ML (n = text length, m = chunks)
 - **Pass 2 (Validation):** O(n) for pattern matching
 - **Pass 3 (Verification):** O(n) for pattern scanning
 - **Total:** ~O(n * m) dominated by ML inference
 
 ### Optimization Strategies
+
 1. **Chunking:** Process text in 2000-char chunks for ML
 2. **Early Exit:** Skip chunks with only placeholders
 3. **Caching:** Reuse entity placeholders for repeated PII
 4. **Parallel Processing:** Can process independent chunks concurrently (future enhancement)
 
 ### Typical Performance
+
 ```
 Small document (1 KB):    0.5-1 second
 Medium document (10 KB):  2-4 seconds
@@ -332,18 +361,21 @@ Large document (100 KB):  10-20 seconds
 ## Testing Strategy
 
 ### Unit Tests
+
 - ✅ Each pattern tested independently
 - ✅ Whitelist verification
 - ✅ Placeholder generation
 - ✅ Edge cases (empty strings, special characters)
 
 ### Integration Tests
+
 - ✅ Full multi-pass pipeline
 - ✅ Real medical document samples
 - ✅ Confidence scoring validation
 - ✅ Performance benchmarks
 
 ### Validation Tests (NEW)
+
 - ✅ Secondary pass catches missed entities
 - ✅ Verification detects suspicious patterns
 - ✅ Confidence score accuracy
@@ -354,6 +386,7 @@ Large document (100 KB):  10-20 seconds
 ## Future Enhancements
 
 ### Potential Optimizations
+
 1. **Parallel Chunking:** Process chunks in parallel using Web Workers
 2. **Lower ML Threshold:** Reduce confidence threshold for PER entities to 75%
 3. **Additional Passes:** Add Pass 2.5 for low-confidence ML entities
@@ -361,6 +394,7 @@ Large document (100 KB):  10-20 seconds
 5. **Chunk Overlap:** Add overlap to catch entities split at boundaries
 
 ### Advanced Features
+
 1. **Adaptive Thresholds:** Adjust patterns based on document type
 2. **Custom Whitelists:** Allow users to define domain-specific safe terms
 3. **Reversible Scrubbing:** Store encrypted mappings for authorized de-identification
@@ -371,6 +405,7 @@ Large document (100 KB):  10-20 seconds
 ## Conclusion
 
 The multi-pass compiler-like architecture provides:
+
 - **Near-perfect PII protection** (98-100% confidence)
 - **Multiple safety nets** to catch edge cases
 - **Quantified confidence** for risk assessment
@@ -380,6 +415,7 @@ The multi-pass compiler-like architecture provides:
 **Target Achieved:** 98-100% PII protection (up from 95%)
 
 This approach mirrors proven compiler design principles:
+
 - Multiple passes for thoroughness
 - Each pass specializes in one aspect
 - Later passes optimize earlier passes

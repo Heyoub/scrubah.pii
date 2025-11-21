@@ -36,18 +36,21 @@ Scrubah.PII transforms messy medical records into clean, LLM-ready datasets:
 ## ✨ Features
 
 ### 🔒 Privacy-First Architecture
+
 - **No server uploads** - Everything runs locally via WASM
 - **No API calls** - NER model runs in-browser
 - **IndexedDB storage** - Data never leaves your machine
 - **Open source** - Audit the code yourself
 
 ### 🧠 Hybrid PII Detection
+
 - **Regex patterns**: Email, phone, SSN, credit cards, MRN (with context awareness)
 - **ML entity recognition**: Names (PER), locations (LOC), organizations (ORG)
 - **Confidence scoring**: 85%+ threshold to reduce false positives
 - **Placeholder consistency**: Same entity → same placeholder across documents
 
 ### 📊 Intelligent Timeline Compilation
+
 - **Content-based deduplication**: SHA-256 + SimHash for fuzzy matching
 - **Date extraction**: From filenames and document content (date-fns)
 - **Document classification**: Labs, imaging, progress notes, pathology, etc.
@@ -56,6 +59,7 @@ Scrubah.PII transforms messy medical records into clean, LLM-ready datasets:
 - **Cross-referencing**: Links between related documents
 
 ### 🚀 Performance Optimized
+
 - **Chunked processing**: 2000-char chunks for optimal ML inference
 - **Progress logging**: Real-time console feedback
 - **Background processing**: Non-blocking UI updates
@@ -79,6 +83,7 @@ Scrubah.PII transforms messy medical records into clean, LLM-ready datasets:
 ```
 
 **Stack:**
+
 - **Frontend**: React 18 + TypeScript 5.9 + Vite 7.2
 - **Parsing**: PDF.js (digital + OCR), Mammoth (DOCX), Tesseract.js (images)
 - **ML**: Hugging Face Transformers.js (Xenova/bert-base-NER, quantized)
@@ -91,6 +96,7 @@ Scrubah.PII transforms messy medical records into clean, LLM-ready datasets:
 ## 🚀 Quick Start
 
 ### Prerequisites
+
 - **Node.js** 18+ (for dev server)
 - **Modern browser** with WASM support (Chrome 91+, Firefox 89+, Safari 15+)
 
@@ -108,7 +114,7 @@ npm install
 npm start
 ```
 
-Open http://localhost:3501/ (or check console for port)
+Open <http://localhost:3501/> (or check console for port)
 
 ### Basic Usage
 
@@ -134,6 +140,7 @@ Feed to Claude/GPT-4 for analysis
 ```
 
 **Example Timeline Output:**
+
 ```markdown
 # 🏥 Medical Record Timeline
 
@@ -188,6 +195,7 @@ npm run build  # Runs tsc + vite build
 ```
 
 **Test Coverage:**
+
 - File Parser: PDF (digital + OCR), DOCX, images
 - PII Scrubber: Regex patterns, ML inference, placeholder consistency
 - Markdown Formatter: YAML frontmatter, artifact removal
@@ -197,11 +205,13 @@ npm run build  # Runs tsc + vite build
 ## 🔧 Configuration
 
 ### Environment Variables
+
 No environment variables required! Everything runs locally.
 
 ### Customization
 
 **Add Custom Lab Tests** (`services/labExtractor.ts`):
+
 ```typescript
 const LAB_TEST_PATTERNS = {
   CUSTOM_TEST: /(?:Test Name).*?(\d+\.?\d*)\s*(?:unit)/i,
@@ -210,6 +220,7 @@ const LAB_TEST_PATTERNS = {
 ```
 
 **Adjust Duplicate Threshold** (`services/contentHasher.ts`):
+
 ```typescript
 if (similarity >= 0.95) {  // Change threshold here
   return { isDuplicate: true, ... };
@@ -217,6 +228,7 @@ if (similarity >= 0.95) {  // Change threshold here
 ```
 
 **Modify ML Confidence** (`services/piiScrubber.ts`):
+
 ```typescript
 const entities = output.filter(e => e.score > 0.85);  // Adjust here
 ```
@@ -228,18 +240,22 @@ const entities = output.filter(e => e.score > 0.85);  // Adjust here
 ### Core Services
 
 #### `parseFile(file: File): Promise<string>`
+
 Parses various file formats into plain text.
 
 **Supported Formats:**
+
 - PDF (digital text + OCR for scanned pages)
 - DOCX (with table support)
 - Images (PNG, JPG, WEBP via Tesseract OCR)
 - Text (TXT, CSV, MD, JSON)
 
 #### `piiScrubber.scrub(text: string): Promise<ScrubResult>`
+
 Removes PII using hybrid regex + ML approach.
 
 **Returns:**
+
 ```typescript
 interface ScrubResult {
   text: string;              // Scrubbed content
@@ -249,9 +265,11 @@ interface ScrubResult {
 ```
 
 #### `buildMasterTimeline(files: ProcessedFile[]): Promise<MasterTimeline>`
+
 Generates chronological medical timeline with deduplication.
 
 **Returns:**
+
 ```typescript
 interface MasterTimeline {
   documents: TimelineDocument[];
@@ -302,17 +320,20 @@ Contributions welcome! Please:
 ## 📊 Performance
 
 **Timeline Generation** (tested on i7 + 3GB VRAM):
+
 - 10 documents: ~100-200ms
 - 50 documents: ~300-500ms
 - 100 documents: ~500-800ms
 - 200+ documents: ~1-2s
 
 **PII Scrubbing** (per document):
+
 - Small (< 5 pages): ~2-5s
 - Medium (5-20 pages): ~5-15s
 - Large (20+ pages): ~15-30s
 
 **Token Efficiency:**
+
 - Individual files: ~213,000 tokens (142 files)
 - Master timeline: ~130,000 tokens (40% reduction!)
 
@@ -321,13 +342,16 @@ Contributions welcome! Please:
 ## 🛡️ Security & Privacy
 
 ### Local-First Architecture
+
 - **No server uploads**: All processing happens in-browser
 - **No external APIs**: ML models run via WASM
 - **No telemetry**: Zero tracking or analytics
 - **Open source**: Fully auditable code
 
 ### HIPAA Considerations
+
 While Scrubah.PII runs locally and maintains privacy, it is provided **as-is** without warranty. Healthcare organizations must:
+
 - Conduct their own security audit
 - Implement appropriate safeguards per HIPAA requirements
 - Test thoroughly before production use
@@ -346,6 +370,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 Built by [@Heyoub](https://github.com/Heyoub) for [@forgestack](https://forgestack.app)
 
 **Libraries:**
+
 - [Transformers.js](https://github.com/xenova/transformers.js) - Hugging Face models in browser
 - [PDF.js](https://github.com/mozilla/pdf.js) - Mozilla PDF renderer
 - [Tesseract.js](https://github.com/naptha/tesseract.js) - OCR engine
@@ -357,7 +382,7 @@ Built by [@Heyoub](https://github.com/Heyoub) for [@forgestack](https://forgesta
 ## 📞 Contact
 
 - **Author**: [@Heyoub](https://github.com/Heyoub)
-- **Email**: hello@forgestack.app
+- **Email**: <hello@forgestack.app>
 - **Issues**: [GitHub Issues](https://github.com/Heyoub/scrubah-pii/issues)
 
 ---

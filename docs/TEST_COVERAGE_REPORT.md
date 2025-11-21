@@ -7,11 +7,13 @@ This document provides a comprehensive overview of test coverage for the PII scr
 ## Test Files
 
 ### 1. **services/piiScrubber.test.ts** (Unit Tests - ✅ All Passing)
+
 **Status:** ✅ **26/26 tests passing**
 
 Tests regex patterns and context-aware detection WITHOUT calling the full `scrub()` function.
 
-#### Coverage:
+#### Coverage
+
 - ✅ EMAIL pattern detection (valid and invalid formats)
 - ✅ PHONE pattern detection (multiple US formats)
 - ✅ SSN pattern detection (XXX-XX-XXXX format)
@@ -23,6 +25,7 @@ Tests regex patterns and context-aware detection WITHOUT calling the full `scrub
 - ✅ Edge cases (empty strings, whitespace, long documents)
 
 **Run command:**
+
 ```bash
 npm test -- services/piiScrubber.test.ts
 ```
@@ -30,14 +33,17 @@ npm test -- services/piiScrubber.test.ts
 ---
 
 ### 2. **services/piiScrubber.integration.test.ts** (Integration Tests)
+
 **Status:** ⚠️ **Requires browser environment for ML-based tests**
 
 Comprehensive end-to-end tests of the actual `scrub()` function.
 
-#### Pattern-Only Tests (✅ Passing in Node.js):
+#### Pattern-Only Tests (✅ Passing in Node.js)
+
 - ✅ DATE pattern detection (4/4 tests)
 
-#### Full Integration Tests (⚠️ Require browser):
+#### Full Integration Tests (⚠️ Require browser)
+
 - ⚠️ Email scrubbing with PIIMap tracking
 - ⚠️ Phone number scrubbing (all formats)
 - ⚠️ SSN scrubbing
@@ -93,6 +99,7 @@ The `scrub()` function uses Hugging Face Transformers' BERT NER model, which req
 ## How to Run Tests
 
 ### 1. Unit Tests (Node.js) - Recommended for CI/CD
+
 ```bash
 # Run all unit tests
 npm test -- services/piiScrubber.test.ts
@@ -105,6 +112,7 @@ npm test -- services/piiScrubber.test.ts --watch
 ```
 
 ### 2. Integration Tests (Pattern-Only)
+
 ```bash
 # Run DATE pattern integration tests only
 npm test -- services/piiScrubber.integration.test.ts -t "DATE Pattern"
@@ -117,6 +125,7 @@ Since the ML model requires a browser environment, follow these steps to test th
 #### Option A: Browser DevTools Console
 
 1. Start the dev server:
+
    ```bash
    npm run dev
    ```
@@ -126,6 +135,7 @@ Since the ML model requires a browser environment, follow these steps to test th
 3. Open DevTools Console (F12)
 
 4. Run the test function:
+
    ```javascript
    // Import the scrubber
    const { piiScrubber } = await import('./services/piiScrubber.js');
@@ -298,21 +308,25 @@ jobs:
 All structural PII tests are **100% deterministic** because they use regex patterns. Expected results:
 
 ### Email Detection
+
 - Input: `john.doe@example.com`
 - Output: `[EMAIL_1]`
 - PIIMap: `{"john.doe@example.com": "[EMAIL_1]"}`
 
 ### Phone Detection
+
 - Input: `(555) 123-4567`
 - Output: `[PHONE_1]`
 - PIIMap: `{"(555) 123-4567": "[PHONE_1]"}`
 
 ### SSN Detection
+
 - Input: `123-45-6789`
 - Output: `[SSN_1]`
 - PIIMap: `{"123-45-6789": "[SSN_1]"}`
 
 ### Consistency
+
 - Input: `Email john@test.com twice: john@test.com`
 - Output: `Email [EMAIL_1] twice: [EMAIL_1]`
 - PIIMap: `{"john@test.com": "[EMAIL_1]"}` (single entry, used twice)

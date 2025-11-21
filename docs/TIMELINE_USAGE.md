@@ -7,11 +7,13 @@ You now have a **"Generate Timeline"** button that compiles all your processed d
 ## 🎯 How to Use
 
 ### Step 1: Process Your Documents
-1. Visit http://localhost:3501/
+
+1. Visit <http://localhost:3501/>
 2. Drag and drop your PDFs (medical records, labs, imaging reports, etc.)
 3. Wait for all documents to finish processing (green checkmarks)
 
 ### Step 2: Generate Master Timeline
+
 1. Click the green **"Generate Timeline"** button
 2. Wait a few seconds while it:
    - Extracts dates from filenames and content
@@ -22,6 +24,7 @@ You now have a **"Generate Timeline"** button that compiles all your processed d
 3. Download automatically starts: `Medical_Timeline_YYYY-MM-DD.md`
 
 ### Step 3: Review the Timeline
+
 Open the downloaded markdown file. You'll see:
 
 ```markdown
@@ -67,6 +70,7 @@ Open the downloaded markdown file. You'll see:
 ## 🔍 What Gets Detected
 
 ### Content-Based Deduplication
+
 ```
 ✅ Detected: "LABRPT 10-22-2025.pdf" and "Lab Report Oct 22.pdf"
               → Same content, different filenames
@@ -79,7 +83,9 @@ Open the downloaded markdown file. You'll see:
 ```
 
 ### Lab Data Extraction
+
 Automatically detects and formats:
+
 - **CBC**: WBC, RBC, HGB, HCT, PLT
 - **CMP**: Glucose, Sodium, Potassium, BUN, Creatinine, Calcium
 - **LFT**: ALT, AST, ALP, Bilirubin
@@ -87,6 +93,7 @@ Automatically detects and formats:
 - **Lipid Panel**: Cholesterol, HDL, LDL, Triglycerides
 
 ### Document Type Classification
+
 - 🧪 Lab Report
 - 🔬 Imaging (CT, MRI, X-Ray, Ultrasound)
 - 🔬 Pathology (Biopsy, Histology)
@@ -98,6 +105,7 @@ Automatically detects and formats:
 ## 🧠 Why This Matters for LLMs
 
 ### Token Efficiency
+
 ```
 Before (individual files):
 - 142 files × ~1,500 tokens = ~213,000 tokens
@@ -111,6 +119,7 @@ After (master timeline):
 ```
 
 ### Attention Optimization
+
 ```
 Timeline Structure:
 ├─ Summary at Top (gets 80% of attention)
@@ -125,6 +134,7 @@ Timeline Structure:
 ```
 
 ### Pathologist-Style Analysis
+
 When you feed this to Claude/GPT-4:
 
 1. **Temporal Progression** ✓
@@ -146,7 +156,9 @@ When you feed this to Claude/GPT-4:
 ## 🎛️ Advanced Usage
 
 ### Check Console for Details
+
 Open browser DevTools → Console to see:
+
 ```
 📊 Generating master timeline from 142 documents...
 🗓️ Building master timeline...
@@ -156,7 +168,9 @@ Open browser DevTools → Console to see:
 ```
 
 ### Customize Lab Patterns
+
 Edit `services/labExtractor.ts` to add custom lab tests:
+
 ```typescript
 const LAB_TEST_PATTERNS = {
   // Add your custom patterns
@@ -166,7 +180,9 @@ const LAB_TEST_PATTERNS = {
 ```
 
 ### Adjust Duplicate Threshold
+
 Edit `services/contentHasher.ts`:
+
 ```typescript
 // Near-duplicate threshold (default: 95%)
 if (similarity >= 0.95) {  // ← Change this
@@ -177,20 +193,24 @@ if (similarity >= 0.95) {  // ← Change this
 ## 🔧 Troubleshooting
 
 ### "No processed files to compile"
+
 - Make sure you've uploaded files and they've finished processing (green checkmarks)
 - Check that files have `scrubbedText` (should happen automatically)
 
 ### Dates Not Extracting Correctly
+
 - Check filename contains date in format: `MM-DD-YYYY`, `YYYY-MM-DD`, or `MMM DD YYYY`
 - Or date appears in first 500 chars of document content
 - Fallback: uses current date
 
 ### Lab Data Not Extracted
+
 - Check if lab tests match patterns in `labExtractor.ts`
 - Currently supports ~30 common tests
 - Regex is case-insensitive but format-specific
 
 ### Duplicates Not Detected
+
 - Requires **content** similarity, not filename
 - Minor OCR differences okay (95% threshold)
 - Very different reports won't be marked as duplicates (by design)
@@ -198,12 +218,14 @@ if (similarity >= 0.95) {  // ← Change this
 ## 📊 Performance
 
 **Timeline Generation Speed** (your i7 hardware):
+
 - 10 documents: ~100-200ms
 - 50 documents: ~300-500ms
 - 100 documents: ~500-800ms
 - 200+ documents: ~1-2 seconds
 
 **Why It's Fast**:
+
 - Native Web Crypto API (hardware accelerated)
 - Simple regex patterns (no ML inference)
 - Efficient sorting algorithms (O(n log n))
@@ -213,6 +235,7 @@ if (similarity >= 0.95) {  // ← Change this
 We leveraged your existing tools + added:
 
 ### What We Use
+
 - ✅ **Web Crypto API** (native) - SHA-256 hashing
 - ✅ **date-fns** (battle-tested) - Robust date parsing
 - ✅ **Dexie** (your existing) - IndexedDB for persistence
@@ -220,6 +243,7 @@ We leveraged your existing tools + added:
 - ✅ **React 18** (your existing) - UI framework
 
 ### What We Didn't Need
+
 - ❌ External deduplication services
 - ❌ Cloud APIs
 - ❌ Complex NLP libraries
@@ -230,14 +254,18 @@ Everything runs **100% locally in your browser**.
 ## 💡 Pro Tips
 
 ### 1. Upload in Batches
+
 Upload related documents together for better duplicate detection:
+
 ```
 ✅ Good: Upload all October 2025 labs together
 ❌ Less optimal: Upload randomly across time periods
 ```
 
 ### 2. Consistent Naming Helps
+
 While not required, consistent filename patterns improve date extraction:
+
 ```
 ✅ Best: "LABRPT 10-22-2025.pdf"
 ✅ Good: "Lab Report Oct 22 2025.pdf"
@@ -245,7 +273,9 @@ While not required, consistent filename patterns improve date extraction:
 ```
 
 ### 3. Review Console Logs
+
 Duplicate detection details are logged. Check console to understand what was detected:
+
 ```javascript
 // Example console output:
 "Document #45 is 98% similar to Document #23"
@@ -253,6 +283,7 @@ Duplicate detection details are logged. Check console to understand what was det
 ```
 
 ### 4. Use Both Export Options
+
 - **Individual Files** (Download Bundle): For quick reference
 - **Master Timeline**: For comprehensive LLM analysis
 

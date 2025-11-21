@@ -109,11 +109,13 @@ The complete Scrubah.PII system can be architected as a **full-stack compiler** 
 ## Compiler Phases in Detail
 
 ### Phase 1: Lexical Analysis (File Parsing)
+
 **Compiler Analogy:** Tokenization of source code
 
 **Purpose:** Convert various file formats into normalized plain text
 
 **Implementation:**
+
 ```typescript
 // services/fileParser.ts
 export const parseFile = async (file: File): Promise<string> => {
@@ -126,6 +128,7 @@ export const parseFile = async (file: File): Promise<string> => {
 ```
 
 **Output Format:**
+
 ```
 PATIENT INFORMATION
 Name: [ORIGINAL NAME]
@@ -136,11 +139,13 @@ DOB: 01/15/1985
 ---
 
 ### Phase 2: Syntax Analysis (PII Scrubbing - Pass 1)
+
 **Compiler Analogy:** Parsing tokens into Abstract Syntax Tree (AST)
 
 **Purpose:** Identify and classify PII entities
 
 **Implementation:**
+
 ```typescript
 // services/piiScrubber.ts
 public async scrub(text: string): Promise<ScrubResult> {
@@ -159,6 +164,7 @@ public async scrub(text: string): Promise<ScrubResult> {
 ```
 
 **Output Format:**
+
 ```
 PATIENT INFORMATION
 Name: [PER_1]
@@ -167,6 +173,7 @@ DOB: [DATE_1]
 ```
 
 **AST-Like Structure (Internal):**
+
 ```typescript
 {
   entities: [
@@ -179,11 +186,13 @@ DOB: [DATE_1]
 ---
 
 ### Phase 3: Semantic Analysis (Validation + Verification)
+
 **Compiler Analogy:** Type checking, scope resolution
 
 **Purpose:** Validate correctness and catch edge cases
 
 **Implementation:**
+
 ```typescript
 // Pass 2: Secondary validation
 const { text: validatedText, ... } = this.secondaryValidationPass(...);
@@ -193,12 +202,14 @@ const validation = this.verifyNoSuspiciousPII(validatedText);
 ```
 
 **Semantic Checks:**
+
 - ✅ No unmatched PII patterns remain
 - ✅ All entities have valid placeholders
 - ✅ Whitelist terms preserved
 - ✅ Confidence score calculated
 
 **Error Reporting:**
+
 ```
 ⚠️  Validation found 2 suspicious patterns
 Suspicious matches: ['Capitalized sequence: "General Hospital"']
@@ -208,11 +219,13 @@ Confidence: 98.0%
 ---
 
 ### Phase 4: Intermediate Representation (Timeline Organization)
+
 **Compiler Analogy:** Converting AST to IR for optimization
 
 **Purpose:** Transform linear text into structured timeline
 
 **Implementation:**
+
 ```typescript
 // services/timelineOrganizer.ts (hypothetical enhancement)
 export const organizeTimeline = (scrubbedText: string): Timeline => {
@@ -228,6 +241,7 @@ export const organizeTimeline = (scrubbedText: string): Timeline => {
 ```
 
 **IR Structure:**
+
 ```typescript
 interface Timeline {
   events: TimelineEvent[];
@@ -243,6 +257,7 @@ interface TimelineEvent {
 ```
 
 **Example IR:**
+
 ```json
 {
   "events": [
@@ -265,6 +280,7 @@ interface TimelineEvent {
 ---
 
 ### Phase 5: Optimization (Compression + Deduplication)
+
 **Compiler Analogy:** Code optimization (dead code elimination, constant folding)
 
 **Purpose:** Reduce redundancy while preserving information
@@ -272,18 +288,21 @@ interface TimelineEvent {
 **Optimization Techniques:**
 
 1. **Dead Code Elimination**
+
    ```typescript
    // Remove repeated headers/footers
    const cleanedPages = removeRepeatedHeaders(pages);
    ```
 
 2. **Constant Folding**
+
    ```typescript
    // Deduplicate repeated phrases
    const deduplicated = deduplicateRepeatedSections(text);
    ```
 
 3. **Reference Compression**
+
    ```typescript
    // Replace repeated entities with references
    // Before: "[PER_1] visited. [PER_1] was discharged. [PER_1] returned."
@@ -291,12 +310,14 @@ interface TimelineEvent {
    ```
 
 4. **Whitespace Optimization**
+
    ```typescript
    // Normalize to max 2 newlines
    text.replace(/\n{3,}/g, '\n\n');
    ```
 
 **Compression Metrics:**
+
 ```typescript
 {
   originalSize: 100000, // bytes
@@ -309,11 +330,13 @@ interface TimelineEvent {
 ---
 
 ### Phase 6: Code Generation (Final Formatting)
+
 **Compiler Analogy:** Assembly/bytecode generation
 
 **Purpose:** Generate final output format
 
 **Implementation:**
+
 ```typescript
 // services/markdownFormatter.ts
 export const formatToMarkdown = (
@@ -347,6 +370,7 @@ ${generateTimelineMarkdown(timeline)}
 ```
 
 **Final Output:**
+
 ```markdown
 ---
 source_file: "patient_record.pdf"
@@ -378,6 +402,7 @@ Blood work shows...
 ## Compiler Optimizations
 
 ### Multi-Pass Optimization
+
 ```typescript
 // Pass 1: Basic scrubbing
 const pass1 = await scrub(text);
@@ -396,6 +421,7 @@ const final = verifyOutput(compressed);
 ```
 
 ### Parallel Processing (Future)
+
 ```typescript
 // Process independent chunks in parallel
 const chunks = splitIntoChunks(text, 2000);
@@ -410,6 +436,7 @@ const result = mergeChunks(scrubbed);
 ## Quality Metrics (Like Compiler Warnings/Errors)
 
 ### Error Levels
+
 ```typescript
 enum QualityLevel {
   PASS = 'PASS',      // 100% confidence, no issues
@@ -420,6 +447,7 @@ enum QualityLevel {
 ```
 
 ### Output Metrics
+
 ```typescript
 interface CompilerOutput {
   status: QualityLevel;
@@ -441,6 +469,7 @@ interface CompilerOutput {
 ## Integration Example
 
 ### Complete Pipeline Usage
+
 ```typescript
 import { parseFile } from './services/fileParser';
 import { piiScrubber } from './services/piiScrubber';
@@ -487,7 +516,9 @@ async function compileDocument(file: File): Promise<CompilerOutput> {
 ## Benefits of Compiler Architecture
 
 ### 1. **Modularity**
+
 Each phase is independent and testable
+
 ```typescript
 // Test lexical phase independently
 expect(parseFile(pdf)).toEqual(expectedText);
@@ -500,7 +531,9 @@ expect(validate(scrubbed)).toEqual(expectedValidation);
 ```
 
 ### 2. **Composability**
+
 Phases can be swapped or enhanced
+
 ```typescript
 // Use different parser
 const altParsed = await alternativeParser(file);
@@ -513,7 +546,9 @@ const timeline = organizeTimeline(altScrubbed);
 ```
 
 ### 3. **Debuggability**
+
 Each phase has clear inputs/outputs
+
 ```typescript
 // Debug specific phase
 console.log('After lexical:', lexicalOutput);
@@ -522,7 +557,9 @@ console.log('After semantic:', semanticOutput);
 ```
 
 ### 4. **Quality Assurance**
+
 Multiple validation checkpoints
+
 ```typescript
 // Checkpoint after each phase
 assertValid(lexicalOutput, 'Lexical phase');
@@ -535,7 +572,9 @@ assertValid(semanticOutput, 'Semantic phase');
 ## Future Enhancements
 
 ### 1. **JIT Compilation**
+
 Cache compiled outputs for repeated documents
+
 ```typescript
 const cache = new Map<string, CompiledDocument>();
 if (cache.has(fileHash)) {
@@ -544,7 +583,9 @@ if (cache.has(fileHash)) {
 ```
 
 ### 2. **Incremental Compilation**
+
 Only reprocess changed sections
+
 ```typescript
 if (onlyNewPages) {
   processNewPages(newPages);
@@ -553,7 +594,9 @@ if (onlyNewPages) {
 ```
 
 ### 3. **Hot Reloading**
+
 Update scrubbing rules without recompiling
+
 ```typescript
 // Watch for pattern updates
 watchPatterns(() => {
@@ -563,7 +606,9 @@ watchPatterns(() => {
 ```
 
 ### 4. **Target Formats**
+
 Generate multiple output formats
+
 ```typescript
 // Like compiler targets: x86, ARM, WASM
 compileDocument(file, { target: 'markdown' });
@@ -576,6 +621,7 @@ compileDocument(file, { target: 'html' });
 ## Conclusion
 
 The full-stack compiler architecture provides:
+
 - ✅ **End-to-end pipeline** from raw files to validated output
 - ✅ **Multiple validation layers** for quality assurance
 - ✅ **Modular design** for easy testing and enhancement
@@ -589,6 +635,7 @@ The full-stack compiler architecture provides:
 
 **Status:** Architecture Designed ✅
 **Next Steps:**
+
 1. Integrate timeline organization with scrubbing pipeline
 2. Add compression phase to multi-pass system
 3. Implement quality checkpoints at each phase

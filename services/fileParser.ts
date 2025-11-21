@@ -17,27 +17,30 @@ interface PDFAggregatedLine {
 
 export const parseFile = async (file: File): Promise<string> => {
   const fileType = file.type;
+  // Extract base MIME type (remove charset and other parameters)
+  // e.g., "text/plain;charset=utf-8" -> "text/plain"
+  const baseMimeType = fileType.split(';')[0].trim();
 
   try {
-    if (fileType === 'application/pdf') {
+    if (baseMimeType === 'application/pdf') {
       return await parsePDF(file);
     } else if (
-      fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      baseMimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     ) {
       return await parseDocx(file);
-    } else if (fileType.startsWith('image/')) {
+    } else if (baseMimeType.startsWith('image/')) {
       return await parseImage(file);
     } else if (
-      fileType === 'text/plain' || 
-      fileType === 'text/csv' || 
-      fileType === 'text/markdown' ||
-      fileType === 'application/json' ||
+      baseMimeType === 'text/plain' ||
+      baseMimeType === 'text/csv' ||
+      baseMimeType === 'text/markdown' ||
+      baseMimeType === 'application/json' ||
       file.name.endsWith('.md') ||
       file.name.endsWith('.csv')
     ) {
       return await file.text();
     } else {
-      throw new Error(`Unsupported file type: ${fileType}`);
+      throw new Error(`Unsupported file type: ${baseMimeType} (original: ${fileType})`);
     }
   } catch (error: any) {
     console.error("Error parsing file:", error);
