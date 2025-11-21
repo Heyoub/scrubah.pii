@@ -13,9 +13,12 @@ const PATTERNS = {
   PHONE: /(?:\+?1[-. ]?)?\(?([0-9]{3})\)?[-. ]?([0-9]{3})[-. ]?([0-9]{4})/g,
   SSN: /\b\d{3}-\d{2}-\d{4}\b/g,
   DATE: /\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b/g,
-  // Context-aware MRN detection
   CREDIT_CARD: /\b(?:\d{4}[-\s]?){3}\d{4}\b/g,
-  ZIPCODE: /\b\d{5}(?:-\d{4})?\b/g
+  ZIPCODE: /\b\d{5}(?:-\d{4})?\b/g,
+  // Address patterns
+  ADDRESS: /\d+\s+(?:[A-Za-z]+\s+){1,4}(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr|Court|Ct|Parkway|Pkwy|Way|Circle|Cir|Place|Pl|Terrace|Ter)(?:\.|\s|,|\s+Apt|\s+Suite|\s+Unit|\s+#)?(?:\s*[A-Za-z0-9#-]*)?/gi,
+  CITY_STATE: /\b[A-Z][a-zA-Z\s]+,\s*[A-Z]{2}\b/g,
+  PO_BOX: /P\.?\s*O\.?\s*Box\s+\d+/gi
 };
 
 // Context-aware MRN detector
@@ -47,8 +50,42 @@ const detectContextualMRN = (text: string): { start: number; end: number; value:
   return matches;
 };
 
+// Context-aware name detector for labeled patient names
+const NAME_LABELS = [
+  'Patient Name', 'Name', 'Full Name', 'Legal Name', 'Patient',
+  'Pt Name', "Patient's Name", 'Name of Patient', 'patientName',
+  'patient_name', 'fullName', 'full_name'
+];
+
+const detectLabeledName = (text: string): { start: number; end: number; value: string }[] => {
+  const matches: { start: number; end: number; value: string }[] = [];
+
+  // Look for names with labels (e.g., "Patient Name: John Smith", "Name: Mary Johnson")
+  // Matches: Title + FirstName + LastName (and optional Middle)
+  const contextPattern = new RegExp(
+    `(${NAME_LABELS.join('|')})[:\\s]+(?:(Dr|Mr|Ms|Mrs|Miss)\\.?\\s+)?([A-Z][a-z]+(?:\\s+[A-Z][a-z]+){1,3})`,
+    'gi'
+  );
+
+  let match;
+  while ((match = contextPattern.exec(text)) !== null) {
+    // Extract the full name (including title if present)
+    const nameValue = match[2] ? `${match[2]} ${match[3]}` : match[3];
+    const nameStartOffset = match[0].indexOf(nameValue);
+    const start = match.index + nameStartOffset;
+
+    matches.push({
+      start,
+      end: start + nameValue.length,
+      value: nameValue
+    });
+  }
+
+  return matches;
+};
+
 // Export for testing
-export { detectContextualMRN, PATTERNS, MRN_CONTEXT_KEYWORDS };
+export { detectContextualMRN, detectLabeledName, PATTERNS, MRN_CONTEXT_KEYWORDS, NAME_LABELS };
 
 class PiiScrubberService {
   private static instance: PiiScrubberService;
@@ -101,10 +138,10 @@ class PiiScrubberService {
 
     const globalReplacements: PIIMap = {};
     let totalReplacements = 0;
-    
+
     // Context consistency map
     const entityToPlaceholder: Record<string, string> = {};
-    const counters = { PER: 0, LOC: 0, ORG: 0, EMAIL: 0, PHONE: 0, ID: 0 };
+    const counters = { PER: 0, LOC: 0, ORG: 0, EMAIL: 0, PHONE: 0, ID: 0, DATE: 0 };
 
     // --- PHASE 1: REGEX PRE-PASS ---
     // We replace structural PII first to prevent BERT from getting confused or splitting them.
@@ -130,6 +167,12 @@ class PiiScrubberService {
     runRegex('ID', PATTERNS.SSN, 'SSN');
     runRegex('ID', PATTERNS.CREDIT_CARD, 'CARD');
     runRegex('ID', PATTERNS.ZIPCODE, 'ZIP');
+    runRegex('DATE', PATTERNS.DATE, 'DATE');
+
+    // Address patterns - run BEFORE city/state to catch full addresses
+    runRegex('LOC', PATTERNS.ADDRESS, 'ADDR');
+    runRegex('LOC', PATTERNS.PO_BOX, 'POBOX');
+    runRegex('LOC', PATTERNS.CITY_STATE, 'LOC');
 
     // Context-aware MRN detection
     const mrnMatches = detectContextualMRN(interimText);
@@ -137,6 +180,19 @@ class PiiScrubberService {
       if (!entityToPlaceholder[value]) {
         counters.ID++;
         const placeholder = `[MRN_${counters.ID}]`;
+        entityToPlaceholder[value] = placeholder;
+        globalReplacements[value] = placeholder;
+        totalReplacements++;
+      }
+      interimText = interimText.substring(0, start) + entityToPlaceholder[value] + interimText.substring(end);
+    });
+
+    // Context-aware labeled name detection
+    const nameMatches = detectLabeledName(interimText);
+    nameMatches.reverse().forEach(({ start, end, value }) => {
+      if (!entityToPlaceholder[value]) {
+        counters.PER++;
+        const placeholder = `[PER_${counters.PER}]`;
         entityToPlaceholder[value] = placeholder;
         globalReplacements[value] = placeholder;
         totalReplacements++;
