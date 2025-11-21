@@ -453,7 +453,7 @@ const mlInference = (
             suggestion: "Using regex-only mode as fallback"
           })
         }),
-        Effect.timeout(`${config.mlTimeout}ms`),
+        Effect.timeout(config.mlTimeout),
         Effect.catchAll((error) => {
           // Log error to collector
           errorCollector.add(error as any);
@@ -547,10 +547,10 @@ export const scrubPII = (
     let mlDetections: DetectionResult[] = [];
     let mlUsed = false;
 
-    if (!options?.skipML) {
+    if (!validatedInput.options?.skipML) {
       const chunks = yield* _(chunkText(
         validatedInput.text,
-        options?.customChunkSize || config.chunkSize
+        validatedInput.options?.customChunkSize || config.chunkSize
       ));
 
       mlUsed = true;

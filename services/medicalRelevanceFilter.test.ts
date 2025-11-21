@@ -12,7 +12,7 @@ import {
   filterRelevantDocuments,
   RelevanceScoreSchema
 } from './medicalRelevanceFilter';
-import { ProcessedFile } from '../types';
+import { ProcessedFile, ProcessingStage } from '../types';
 
 /**
  * TEST FIXTURES - Realistic medical document samples
@@ -144,7 +144,7 @@ const createTestDoc = (filename: string, scrubbedText: string): ProcessedFile =>
   originalName: filename,
   size: scrubbedText.length,
   type: 'application/pdf',
-  stage: 'COMPLETED' as const,
+  stage: ProcessingStage.COMPLETED,
   scrubbedText
 });
 
@@ -237,7 +237,7 @@ describe('Medical Relevance Filter - Garbage Collection', () => {
       const text = FIXTURES.SURGERY_REPORT;
       const result = await Effect.runPromise(calculateRelevanceScore(text, 'surgery_2024-01-15.pdf'));
 
-      expect(result.score).toBeGreaterThanOrEqualTo(70); // High value
+      expect(result.score).toBeGreaterThanOrEqual(70); // High value
       expect(result.recommendation).toBe('keep');
       expect(result.hasOutcomes).toBe(true);
       expect(result.hasProcedures).toBe(true);
@@ -248,7 +248,7 @@ describe('Medical Relevance Filter - Garbage Collection', () => {
       const text = FIXTURES.PATHOLOGY_REPORT;
       const result = await Effect.runPromise(calculateRelevanceScore(text, 'pathology.pdf'));
 
-      expect(result.score).toBeGreaterThanOrEqualTo(65); // High value
+      expect(result.score).toBeGreaterThanOrEqual(65); // High value
       expect(result.recommendation).toBe('keep');
       expect(result.hasDiagnoses).toBe(true);
     });
@@ -257,7 +257,7 @@ describe('Medical Relevance Filter - Garbage Collection', () => {
       const text = FIXTURES.PROGRESS_NOTE_LIGHT;
       const result = await Effect.runPromise(calculateRelevanceScore(text, 'progress_note.pdf'));
 
-      expect(result.score).toBeGreaterThanOrEqualTo(30);
+      expect(result.score).toBeGreaterThanOrEqual(30);
       expect(result.score).toBeLessThan(60);
       expect(result.recommendation).toBe('demote');
     });
@@ -301,7 +301,7 @@ describe('Medical Relevance Filter - Garbage Collection', () => {
       const filename = 'surgery_2020-01-15.pdf';
       const result = await Effect.runPromise(calculateRelevanceScore(text, filename));
 
-      expect(result.generation).toBeGreaterThanOrEqualTo(2); // 2+ years old
+      expect(result.generation).toBeGreaterThanOrEqual(2); // 2+ years old
     });
 
     it('should give bonus to young generation', async () => {
@@ -399,10 +399,10 @@ describe('Medical Relevance Filter - Garbage Collection', () => {
       // Validate against schema
       const decoded = RelevanceScoreSchema.make(result);
 
-      expect(decoded.score).toBeGreaterThanOrEqualTo(0);
-      expect(decoded.score).toBeLessThanOrEqualTo(100);
-      expect(decoded.placeholderDensity).toBeGreaterThanOrEqualTo(0);
-      expect(decoded.placeholderDensity).toBeLessThanOrEqualTo(1);
+      expect(decoded.score).toBeGreaterThanOrEqual(0);
+      expect(decoded.score).toBeLessThanOrEqual(100);
+      expect(decoded.placeholderDensity).toBeGreaterThanOrEqual(0);
+      expect(decoded.placeholderDensity).toBeLessThanOrEqual(1);
       expect(['keep', 'demote', 'discard']).toContain(decoded.recommendation);
     });
   });

@@ -196,8 +196,8 @@ const calculatePlaceholderDensity = (text: string): Effect.Effect<number, never,
   return Effect.sync(() => {
     if (text.length === 0) return 1.0; // Empty = 100% garbage
 
-    const placeholders = text.match(/\[[A-Z_]+_\d+\]/g) || [];
-    const placeholderChars = placeholders.reduce((sum, p) => sum + p.length, 0);
+    const placeholders: string[] = text.match(/\[[A-Z_]+_\d+\]/g) || [];
+    const placeholderChars = placeholders.reduce((sum: number, p: string) => sum + p.length, 0);
 
     return placeholderChars / text.length;
   });
