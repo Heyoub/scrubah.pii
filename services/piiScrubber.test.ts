@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { detectContextualMRN, PATTERNS, MRN_CONTEXT_KEYWORDS } from './piiScrubber';
+import { detectContextualMRN, detectLabeledName, PATTERNS, MRN_CONTEXT_KEYWORDS, NAME_LABELS } from './piiScrubber';
 
 describe('PII Scrubber - Regex Patterns', () => {
   describe('EMAIL Pattern', () => {
@@ -259,5 +259,248 @@ describe('PII Scrubber - Edge Cases', () => {
     const text = 'MRN#: 123456, Patient-ID: 789012';
     // May not match due to special chars, but should not crash
     expect(() => detectContextualMRN(text)).not.toThrow();
+  });
+});
+
+describe('PII Scrubber - Address Patterns', () => {
+  describe('ADDRESS Pattern', () => {
+    it('should match street addresses with full street type', () => {
+      const tests = [
+        '123 Main Street',
+        '456 Elm Avenue',
+        '789 Oak Road',
+        '1234 Pine Boulevard',
+        '567 Maple Drive',
+        '890 Cherry Lane',
+        '321 Sunset Court',
+        '654 River Parkway'
+      ];
+
+      tests.forEach(address => {
+        const matches = address.match(PATTERNS.ADDRESS);
+        expect(matches, `Should match: ${address}`).not.toBeNull();
+        expect(matches!.length).toBeGreaterThan(0);
+      });
+    });
+
+    it('should match street addresses with abbreviations', () => {
+      const tests = [
+        '123 Main St',
+        '456 Elm Ave',
+        '789 Oak Rd',
+        '1234 Pine Blvd',
+        '567 Maple Dr',
+        '890 Cherry Ln',
+        '321 Sunset Ct',
+        '654 River Pkwy'
+      ];
+
+      tests.forEach(address => {
+        const matches = address.match(PATTERNS.ADDRESS);
+        expect(matches, `Should match: ${address}`).not.toBeNull();
+      });
+    });
+
+    it('should match addresses with apartment/suite numbers', () => {
+      const tests = [
+        '123 Main St Apt 4B',
+        '456 Elm Avenue Suite 200',
+        '789 Oak Road Unit 5',
+        '1234 Pine Blvd #302'
+      ];
+
+      tests.forEach(address => {
+        const matches = address.match(PATTERNS.ADDRESS);
+        expect(matches, `Should match: ${address}`).not.toBeNull();
+      });
+    });
+
+    it('should match multi-word street names', () => {
+      const tests = [
+        '123 Park Place Avenue',
+        '456 Martin Luther King Boulevard',
+        '789 West Oak Street'
+      ];
+
+      tests.forEach(address => {
+        const matches = address.match(PATTERNS.ADDRESS);
+        expect(matches, `Should match: ${address}`).not.toBeNull();
+      });
+    });
+  });
+
+  describe('CITY_STATE Pattern', () => {
+    it('should match city and state combinations', () => {
+      const tests = [
+        'Boston, MA',
+        'New York, NY',
+        'Los Angeles, CA',
+        'Chicago, IL',
+        'Houston, TX',
+        'San Francisco, CA'
+      ];
+
+      tests.forEach(cityState => {
+        const matches = cityState.match(PATTERNS.CITY_STATE);
+        expect(matches, `Should match: ${cityState}`).not.toBeNull();
+        expect(matches![0]).toBe(cityState);
+      });
+    });
+
+    it('should match multi-word city names', () => {
+      const tests = [
+        'San Francisco, CA',
+        'Los Angeles, CA',
+        'New York, NY',
+        'Salt Lake City, UT'
+      ];
+
+      tests.forEach(cityState => {
+        const matches = cityState.match(PATTERNS.CITY_STATE);
+        expect(matches, `Should match: ${cityState}`).not.toBeNull();
+      });
+    });
+
+    it('should not match without state abbreviation', () => {
+      const text = 'Boston, Massachusetts';
+      const matches = text.match(PATTERNS.CITY_STATE);
+      // This will not match since state is not abbreviated
+      expect(matches).toBeNull();
+    });
+  });
+
+  describe('PO_BOX Pattern', () => {
+    it('should match P.O. Box variations', () => {
+      const tests = [
+        'P.O. Box 1234',
+        'PO Box 5678',
+        'P O Box 9012',
+        'P.O.Box 3456'
+      ];
+
+      tests.forEach(poBox => {
+        const matches = poBox.match(PATTERNS.PO_BOX);
+        expect(matches, `Should match: ${poBox}`).not.toBeNull();
+        expect(matches!.length).toBeGreaterThan(0);
+      });
+    });
+
+    it('should match in full address context', () => {
+      const text = 'Mailing Address: P.O. Box 1234, Phoenix, AZ 85001';
+      const matches = text.match(PATTERNS.PO_BOX);
+      expect(matches).not.toBeNull();
+      expect(matches!.length).toBe(1);
+    });
+  });
+});
+
+describe('PII Scrubber - Label-Based Name Detection', () => {
+  it('should detect names with common labels', () => {
+    const tests = [
+      { text: 'Patient Name: John Smith', expected: 'John Smith' },
+      { text: 'Name: Mary Johnson', expected: 'Mary Johnson' },
+      { text: 'Full Name: Robert Williams', expected: 'Robert Williams' },
+      { text: 'Legal Name: Sarah Davis', expected: 'Sarah Davis' }
+    ];
+
+    tests.forEach(({ text, expected }) => {
+      const matches = detectLabeledName(text);
+      expect(matches.length, `Should find name in: ${text}`).toBeGreaterThan(0);
+      expect(matches[0].value).toBe(expected);
+    });
+  });
+
+  it('should detect names with titles', () => {
+    const tests = [
+      { text: 'Patient Name: Dr. Jane Smith', expected: 'Dr. Jane Smith' },
+      { text: 'Name: Mr. John Doe', expected: 'Mr. John Doe' },
+      { text: 'Full Name: Mrs. Mary Johnson', expected: 'Mrs. Mary Johnson' },
+      { text: 'Patient: Ms. Sarah Williams', expected: 'Ms. Sarah Williams' }
+    ];
+
+    tests.forEach(({ text, expected }) => {
+      const matches = detectLabeledName(text);
+      expect(matches.length, `Should find name in: ${text}`).toBeGreaterThan(0);
+      expect(matches[0].value).toBe(expected);
+    });
+  });
+
+  it('should detect names with middle names', () => {
+    const tests = [
+      { text: 'Patient Name: John Michael Smith', expected: 'John Michael Smith' },
+      { text: 'Name: Mary Ann Johnson', expected: 'Mary Ann Johnson' }
+    ];
+
+    tests.forEach(({ text, expected }) => {
+      const matches = detectLabeledName(text);
+      expect(matches.length, `Should find name in: ${text}`).toBeGreaterThan(0);
+      expect(matches[0].value).toBe(expected);
+    });
+  });
+
+  it('should detect names with JSON-style labels', () => {
+    const tests = [
+      'patientName: Alice Brown',
+      'patient_name: Michael Green',
+      'fullName: Jennifer White',
+      'full_name: David Lee'
+    ];
+
+    tests.forEach(text => {
+      const matches = detectLabeledName(text);
+      expect(matches.length, `Should find name in: ${text}`).toBeGreaterThan(0);
+    });
+  });
+
+  it('should handle multiple labeled names in text', () => {
+    const text = `
+      Patient Name: John Smith
+      Name: Mary Johnson
+      Full Name: Robert Williams
+    `;
+    const matches = detectLabeledName(text);
+    expect(matches.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('should provide correct start and end positions', () => {
+    const text = 'Patient Name: John Smith';
+    const matches = detectLabeledName(text);
+    expect(matches).toHaveLength(1);
+    expect(text.substring(matches[0].start, matches[0].end)).toBe('John Smith');
+  });
+
+  it('should not match standalone names without labels', () => {
+    const text = 'The patient was examined and treated successfully.';
+    const matches = detectLabeledName(text);
+    expect(matches).toHaveLength(0);
+  });
+
+  it('should handle case-insensitive labels', () => {
+    const tests = [
+      'patient name: John Smith',
+      'PATIENT NAME: Mary Johnson',
+      'Patient Name: Robert Williams'
+    ];
+
+    tests.forEach(text => {
+      const matches = detectLabeledName(text);
+      expect(matches.length, `Should find name in: ${text}`).toBeGreaterThan(0);
+    });
+  });
+});
+
+describe('PII Scrubber - Pattern Coverage for New Patterns', () => {
+  it('should have patterns for all address types', () => {
+    expect(PATTERNS.ADDRESS).toBeDefined();
+    expect(PATTERNS.CITY_STATE).toBeDefined();
+    expect(PATTERNS.PO_BOX).toBeDefined();
+  });
+
+  it('should have comprehensive name labels', () => {
+    expect(NAME_LABELS).toContain('Patient Name');
+    expect(NAME_LABELS).toContain('Name');
+    expect(NAME_LABELS).toContain('Full Name');
+    expect(NAME_LABELS).toContain('patientName');
+    expect(NAME_LABELS.length).toBeGreaterThanOrEqual(8);
   });
 });
