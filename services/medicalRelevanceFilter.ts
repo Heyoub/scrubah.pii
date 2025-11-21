@@ -194,11 +194,12 @@ const isGarbage = (
  */
 const calculatePlaceholderDensity = (text: string): Effect.Effect<number, never, never> => {
   return Effect.sync(() => {
-    const words = text.split(/\s+/).filter(w => w.length > 0);
-    if (words.length === 0) return 1.0; // Empty = 100% garbage
+    if (text.length === 0) return 1.0; // Empty = 100% garbage
 
     const placeholders = text.match(/\[[A-Z_]+_\d+\]/g) || [];
-    return placeholders.length / words.length;
+    const placeholderChars = placeholders.reduce((sum, p) => sum + p.length, 0);
+
+    return placeholderChars / text.length;
   });
 };
 
