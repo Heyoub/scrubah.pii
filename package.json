@@ -20,10 +20,13 @@
   ],
   "private": true,
   "dependencies": {
+    "@effect/platform": "^0.68.0",
+    "@effect/schema": "^0.75.0",
     "@huggingface/transformers": "^3.0.0",
     "clsx": "^2.1.0",
     "date-fns": "^4.1.0",
     "dexie": "^3.2.4",
+    "effect": "^3.10.0",
     "jszip": "^3.10.1",
     "lucide-react": "^0.344.0",
     "mammoth": "^1.7.1",
