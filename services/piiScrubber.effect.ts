@@ -256,15 +256,24 @@ const regexPrePass = (text: string): ScrubState => {
   const entityToPlaceholder: Record<string, string> = {};
 
   const runRegex = (type: string, regex: RegExp, prefix: string) => {
-    interimText = interimText.replace(regex, (match) => {
-      if (!entityToPlaceholder[match]) {
+    const matches = [...interimText.matchAll(regex)];
+    // Iterate backwards to avoid index issues during replacement
+    for (let i = matches.length - 1; i >= 0; i--) {
+      const match = matches[i];
+      const originalValue = match[0];
+      if (!entityToPlaceholder[originalValue]) {
         counters[type]++;
         const placeholder = `[${prefix}_${counters[type]}]`;
-        entityToPlaceholder[match] = placeholder;
-        replacements[match] = placeholder;
+        entityToPlaceholder[originalValue] = placeholder;
+        replacements[originalValue] = placeholder;
       }
-      return entityToPlaceholder[match];
-    });
+      if (match.index !== undefined) {
+        interimText =
+          interimText.slice(0, match.index) +
+          entityToPlaceholder[originalValue] +
+          interimText.slice(match.index + originalValue.length);
+      }
+    }
   };
 
   runRegex("EMAIL", PATTERNS.EMAIL, "EMAIL");
