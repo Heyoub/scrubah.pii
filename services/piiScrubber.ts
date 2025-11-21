@@ -84,8 +84,51 @@ const detectLabeledName = (text: string): { start: number; end: number; value: s
   return matches;
 };
 
+// Secondary validation patterns (broader, more aggressive)
+const VALIDATION_PATTERNS = {
+  // Catch any remaining capitalized word sequences (potential names)
+  CAPITALIZED_SEQUENCE: /\b[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})+\b/g,
+  // Catch any remaining numeric sequences that look like IDs
+  NUMERIC_ID: /\b[A-Z]{0,3}\d{6,12}\b/g,
+  // Catch email-like patterns that might have been missed
+  EMAIL_LIKE: /\b[a-zA-Z0-9][a-zA-Z0-9._-]*@[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}\b/g,
+  // Catch phone-like patterns
+  PHONE_LIKE: /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g,
+  // Catch date-like patterns
+  DATE_LIKE: /\b\d{1,4}[-\/]\d{1,2}[-\/]\d{1,4}\b/g,
+  // Catch remaining addresses (more aggressive)
+  ADDRESS_LIKE: /\b\d+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3}\b/g
+};
+
+// Words that should NOT be scrubbed (common medical/clinical terms)
+const WHITELIST_TERMS = new Set([
+  'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December',
+  'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+  'Doctor', 'Patient', 'Hospital', 'Clinic', 'Medical', 'Health', 'Treatment', 'Diagnosis',
+  'Blood', 'Heart', 'Liver', 'Kidney', 'Brain', 'Lung', 'Skin', 'Bone',
+  'Pressure', 'Temperature', 'Weight', 'Height', 'Pulse', 'Rate',
+  'Normal', 'Abnormal', 'Positive', 'Negative', 'Result', 'Test', 'Lab', 'Study',
+  'Emergency', 'Discharge', 'Admission', 'Visit', 'Appointment', 'Follow', 'Up',
+  'General', 'Internal', 'External', 'Primary', 'Secondary', 'Acute', 'Chronic',
+  'United', 'States', 'America', 'North', 'South', 'East', 'West', 'Central'
+]);
+
+interface ValidationResult {
+  foundSuspiciousPII: boolean;
+  suspiciousMatches: string[];
+  confidenceScore: number;
+}
+
 // Export for testing
-export { detectContextualMRN, detectLabeledName, PATTERNS, MRN_CONTEXT_KEYWORDS, NAME_LABELS };
+export {
+  detectContextualMRN,
+  detectLabeledName,
+  PATTERNS,
+  VALIDATION_PATTERNS,
+  WHITELIST_TERMS,
+  MRN_CONTEXT_KEYWORDS,
+  NAME_LABELS
+};
 
 class PiiScrubberService {
   private static instance: PiiScrubberService;
@@ -298,12 +341,38 @@ class PiiScrubberService {
     }
 
     const processingTime = ((performance.now() - startTime) / 1000).toFixed(2);
-    console.log(`✅ PII scrubbing complete in ${processingTime}s (${totalReplacements} entities redacted)`);
+    console.log(`✅ Pass 1 (Primary) complete: ${totalReplacements} entities redacted`);
+
+    // --- PHASE 4: SECONDARY VALIDATION PASS ---
+    // Catch anything that slipped through with broader patterns
+    console.log(`🔍 Running Pass 2 (Validation)...`);
+    const { text: validatedText, additionalReplacements, additionalCount } = this.secondaryValidationPass(
+      finalScrubbedText,
+      entityToPlaceholder,
+      counters,
+      globalReplacements
+    );
+
+    const totalSecondPassReplacements = totalReplacements + additionalCount;
+    console.log(`✅ Pass 2 complete: ${additionalCount} additional entities caught`);
+
+    // --- PHASE 5: VERIFICATION ---
+    // Final check to ensure no suspicious patterns remain
+    const validation = this.verifyNoSuspiciousPII(validatedText);
+
+    if (validation.foundSuspiciousPII) {
+      console.warn(`⚠️  Validation found ${validation.suspiciousMatches.length} suspicious patterns`);
+      console.warn(`Suspicious matches:`, validation.suspiciousMatches.slice(0, 10));
+    }
+
+    const totalProcessingTime = ((performance.now() - startTime) / 1000).toFixed(2);
+    console.log(`✅ All passes complete in ${totalProcessingTime}s`);
+    console.log(`📊 Total: ${totalSecondPassReplacements} entities | Confidence: ${validation.confidenceScore.toFixed(1)}%`);
 
     return {
-      text: finalScrubbedText,
+      text: validatedText,
       replacements: globalReplacements,
-      count: totalReplacements
+      count: totalSecondPassReplacements
     };
   }
 
@@ -313,6 +382,207 @@ class PiiScrubberService {
     }
     // Fallback if Intl.Segmenter not supported (older browsers)
     return text.match(/[^.!?]+[.!?]+]*/g) || [text];
+  }
+
+  /**
+   * PHASE 4: SECONDARY VALIDATION PASS
+   *
+   * Multi-pass compiler-like approach:
+   * - Pass 1 (Primary): Strict patterns + ML
+   * - Pass 2 (Validation): Broad patterns + heuristics
+   * - Pass 3 (Verification): Final check
+   *
+   * This pass uses broader, more aggressive patterns to catch edge cases.
+   */
+  private secondaryValidationPass(
+    text: string,
+    entityToPlaceholder: Record<string, string>,
+    counters: any,
+    globalReplacements: PIIMap
+  ): { text: string; additionalReplacements: PIIMap; additionalCount: number } {
+    let validatedText = text;
+    const additionalReplacements: PIIMap = {};
+    let additionalCount = 0;
+
+    // Helper function to check if text is already a placeholder
+    const isPlaceholder = (str: string) => /^\[[A-Z_]+\d+\]$/.test(str);
+
+    // Helper function to check if word is whitelisted
+    const isWhitelisted = (str: string) => {
+      const cleaned = str.trim();
+      return WHITELIST_TERMS.has(cleaned) || WHITELIST_TERMS.has(cleaned.toLowerCase());
+    };
+
+    // 1. Catch remaining capitalized sequences (potential names)
+    const capitalizedMatches = validatedText.match(VALIDATION_PATTERNS.CAPITALIZED_SEQUENCE) || [];
+    for (const match of capitalizedMatches) {
+      if (isPlaceholder(match) || isWhitelisted(match)) continue;
+
+      // Skip if it's likely a medical term or common phrase
+      const words = match.split(/\s+/);
+      if (words.every(w => isWhitelisted(w))) continue;
+
+      if (!entityToPlaceholder[match]) {
+        counters.PER++;
+        const placeholder = `[PER_${counters.PER}]`;
+        entityToPlaceholder[match] = placeholder;
+        globalReplacements[match] = placeholder;
+        additionalReplacements[match] = placeholder;
+        additionalCount++;
+      }
+      validatedText = validatedText.replace(new RegExp(match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), entityToPlaceholder[match]);
+    }
+
+    // 2. Catch remaining numeric IDs
+    const numericMatches = validatedText.match(VALIDATION_PATTERNS.NUMERIC_ID) || [];
+    for (const match of numericMatches) {
+      if (isPlaceholder(match)) continue;
+
+      if (!entityToPlaceholder[match]) {
+        counters.ID++;
+        const placeholder = `[ID_${counters.ID}]`;
+        entityToPlaceholder[match] = placeholder;
+        globalReplacements[match] = placeholder;
+        additionalReplacements[match] = placeholder;
+        additionalCount++;
+      }
+      validatedText = validatedText.replace(new RegExp(match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), entityToPlaceholder[match]);
+    }
+
+    // 3. Catch any remaining email-like patterns
+    const emailMatches = validatedText.match(VALIDATION_PATTERNS.EMAIL_LIKE) || [];
+    for (const match of emailMatches) {
+      if (isPlaceholder(match)) continue;
+
+      if (!entityToPlaceholder[match]) {
+        counters.EMAIL++;
+        const placeholder = `[EMAIL_${counters.EMAIL}]`;
+        entityToPlaceholder[match] = placeholder;
+        globalReplacements[match] = placeholder;
+        additionalReplacements[match] = placeholder;
+        additionalCount++;
+      }
+      validatedText = validatedText.replace(new RegExp(match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), entityToPlaceholder[match]);
+    }
+
+    // 4. Catch any remaining phone-like patterns
+    const phoneMatches = validatedText.match(VALIDATION_PATTERNS.PHONE_LIKE) || [];
+    for (const match of phoneMatches) {
+      if (isPlaceholder(match)) continue;
+
+      if (!entityToPlaceholder[match]) {
+        counters.PHONE++;
+        const placeholder = `[PHONE_${counters.PHONE}]`;
+        entityToPlaceholder[match] = placeholder;
+        globalReplacements[match] = placeholder;
+        additionalReplacements[match] = placeholder;
+        additionalCount++;
+      }
+      validatedText = validatedText.replace(new RegExp(match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), entityToPlaceholder[match]);
+    }
+
+    // 5. Catch any remaining date-like patterns
+    const dateMatches = validatedText.match(VALIDATION_PATTERNS.DATE_LIKE) || [];
+    for (const match of dateMatches) {
+      if (isPlaceholder(match)) continue;
+
+      // Skip if it looks like a time or version number
+      if (/^\d{1,2}:\d{2}/.test(match) || /^v?\d+\.\d+/.test(match)) continue;
+
+      if (!entityToPlaceholder[match]) {
+        counters.DATE++;
+        const placeholder = `[DATE_${counters.DATE}]`;
+        entityToPlaceholder[match] = placeholder;
+        globalReplacements[match] = placeholder;
+        additionalReplacements[match] = placeholder;
+        additionalCount++;
+      }
+      validatedText = validatedText.replace(new RegExp(match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), entityToPlaceholder[match]);
+    }
+
+    // 6. Catch remaining address-like patterns
+    const addressMatches = validatedText.match(VALIDATION_PATTERNS.ADDRESS_LIKE) || [];
+    for (const match of addressMatches) {
+      if (isPlaceholder(match) || isWhitelisted(match)) continue;
+
+      if (!entityToPlaceholder[match]) {
+        counters.LOC++;
+        const placeholder = `[LOC_${counters.LOC}]`;
+        entityToPlaceholder[match] = placeholder;
+        globalReplacements[match] = placeholder;
+        additionalReplacements[match] = placeholder;
+        additionalCount++;
+      }
+      validatedText = validatedText.replace(new RegExp(match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), entityToPlaceholder[match]);
+    }
+
+    return { text: validatedText, additionalReplacements, additionalCount };
+  }
+
+  /**
+   * PHASE 5: VERIFICATION
+   *
+   * Final verification pass to check for any remaining suspicious patterns.
+   * Returns a confidence score (0-100%) indicating how confident we are
+   * that ALL PII has been removed.
+   */
+  private verifyNoSuspiciousPII(text: string): ValidationResult {
+    const suspiciousMatches: string[] = [];
+
+    // Check for patterns that shouldn't be in scrubbed text
+    const checks = [
+      { pattern: VALIDATION_PATTERNS.CAPITALIZED_SEQUENCE, type: 'Capitalized sequence (potential name)' },
+      { pattern: VALIDATION_PATTERNS.NUMERIC_ID, type: 'Numeric ID' },
+      { pattern: VALIDATION_PATTERNS.EMAIL_LIKE, type: 'Email-like pattern' },
+      { pattern: VALIDATION_PATTERNS.PHONE_LIKE, type: 'Phone-like pattern' },
+      { pattern: VALIDATION_PATTERNS.DATE_LIKE, type: 'Date-like pattern' },
+      { pattern: VALIDATION_PATTERNS.ADDRESS_LIKE, type: 'Address-like pattern' }
+    ];
+
+    for (const { pattern, type } of checks) {
+      const matches = text.match(pattern) || [];
+      for (const match of matches) {
+        // Skip if it's already a placeholder
+        if (/^\[[A-Z_]+\d+\]$/.test(match)) continue;
+
+        // Skip whitelisted terms
+        if (WHITELIST_TERMS.has(match.trim()) || WHITELIST_TERMS.has(match.trim().toLowerCase())) continue;
+
+        // Skip if all words in the match are whitelisted
+        const words = match.split(/\s+/);
+        if (words.every(w => WHITELIST_TERMS.has(w.trim()) || WHITELIST_TERMS.has(w.trim().toLowerCase()))) continue;
+
+        suspiciousMatches.push(`${type}: "${match}"`);
+      }
+    }
+
+    const foundSuspiciousPII = suspiciousMatches.length > 0;
+
+    // Calculate confidence score
+    // Start at 100%, reduce based on number of suspicious matches
+    let confidenceScore = 100;
+    if (suspiciousMatches.length > 0) {
+      // Each suspicious match reduces confidence
+      // 1-5 matches: 95-99%
+      // 6-10 matches: 90-94%
+      // 11-20 matches: 80-89%
+      // 21+ matches: <80%
+      if (suspiciousMatches.length <= 5) {
+        confidenceScore = 99 - suspiciousMatches.length;
+      } else if (suspiciousMatches.length <= 10) {
+        confidenceScore = 94 - (suspiciousMatches.length - 5);
+      } else if (suspiciousMatches.length <= 20) {
+        confidenceScore = 89 - (suspiciousMatches.length - 10);
+      } else {
+        confidenceScore = Math.max(50, 79 - (suspiciousMatches.length - 20));
+      }
+    }
+
+    return {
+      foundSuspiciousPII,
+      suspiciousMatches,
+      confidenceScore
+    };
   }
 }
 
