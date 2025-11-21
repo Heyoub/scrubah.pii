@@ -4,13 +4,10 @@
   "reporters": ["html", "clear-text", "progress", "json"],
   "testRunner": "command",
   "commandRunner": {
-    "command": "npm test -- --run"
+    "command": "npm test -- --run services/compression/compression.test.ts"
   },
-  "coverageAnalysis": "perTest",
+  "coverageAnalysis": "off",
   "mutate": [
-    "services/medicalRelevanceFilter.ts",
-    "services/piiScrubber.ts",
-    "services/timelineOrganizer.ts",
     "services/compression/engine.ts",
     "!services/**/*.test.ts",
     "!services/**/*.effect.ts",

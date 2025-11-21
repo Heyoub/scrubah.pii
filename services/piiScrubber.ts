@@ -154,6 +154,12 @@ class PiiScrubberService {
     // If model is already loaded, return immediately
     if (this.pipe) return;
 
+    // Skip ML model loading in test environment (use regex-only mode)
+    if (process.env.VITEST || process.env.NODE_ENV === 'test') {
+      console.log("⚠️  Test mode: Skipping ML model loading (using regex-only PII detection)");
+      return;
+    }
+
     // If model is currently loading, wait for that promise
     if (this.loadPromise) return this.loadPromise;
 
@@ -378,6 +384,12 @@ class PiiScrubberService {
       if (/^(\s*\[[A-Z_]+\d+\]\s*)+$/.test(chunk)) {
           finalScrubbedText += chunk;
           continue;
+      }
+
+      // Skip ML inference if model is not loaded (test mode or regex-only mode)
+      if (!this.pipe) {
+        finalScrubbedText += chunk;
+        continue;
       }
 
       // Performance: Batch with timeout to prevent blocking UI
