@@ -82,6 +82,44 @@ describe('PII Scrubber - Regex Patterns', () => {
       expect(matches![0]).toBe('12345-6789');
     });
   });
+
+  describe('DATE Pattern', () => {
+    it('should match dates in MM/DD/YYYY format', () => {
+      const text = 'Appointment on 12/25/2024';
+      const matches = text.match(PATTERNS.DATE);
+      expect(matches).toHaveLength(1);
+      expect(matches![0]).toBe('12/25/2024');
+    });
+
+    it('should match dates in MM-DD-YYYY format', () => {
+      const text = 'DOB: 03-15-1985';
+      const matches = text.match(PATTERNS.DATE);
+      expect(matches).toHaveLength(1);
+      expect(matches![0]).toBe('03-15-1985');
+    });
+
+    it('should match dates in M/D/YY format', () => {
+      const text = 'Visit: 5/3/24';
+      const matches = text.match(PATTERNS.DATE);
+      expect(matches).toHaveLength(1);
+      expect(matches![0]).toBe('5/3/24');
+    });
+
+    it('should match multiple dates in text', () => {
+      const text = 'Initial visit 01/10/2024, follow-up 02/15/2024, and discharge 03/20/2024';
+      const matches = text.match(PATTERNS.DATE);
+      expect(matches).toHaveLength(3);
+      expect(matches).toContain('01/10/2024');
+      expect(matches).toContain('02/15/2024');
+      expect(matches).toContain('03/20/2024');
+    });
+
+    it('should handle dates with both slash and dash separators', () => {
+      const text = 'DOB: 12/31/1990 and visit date: 06-15-2024';
+      const matches = text.match(PATTERNS.DATE);
+      expect(matches).toHaveLength(2);
+    });
+  });
 });
 
 describe('PII Scrubber - Context-Aware MRN Detection', () => {
