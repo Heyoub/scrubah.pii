@@ -387,8 +387,9 @@ const buildCompressedTimeline = (
     // Estimate compressed size (100 bytes per event for realistic compression)
     const compressedSizeKb = events.length * 0.1;
 
-    // Calculate ratio (should always be <= 1)
-    const ratio = originalSizeKb > 0 ? compressedSizeKb / originalSizeKb : 0;
+    // Calculate ratio (cap at 1.0 since compression can't make things bigger)
+    const rawRatio = originalSizeKb > 0 ? compressedSizeKb / originalSizeKb : 0;
+    const ratio = Math.min(rawRatio, 1.0);
 
     const metadata: CompressionMetadata = {
       originalSizeKb,
