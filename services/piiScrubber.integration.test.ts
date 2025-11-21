@@ -67,8 +67,6 @@ describe('PII Scrubber - Integration Tests (Deterministic, Non-Mocked)', () => {
 
       // Count should be at least 1
       expect(result.count).toBeGreaterThanOrEqual(1);
-
-      console.log('Email scrubbing:', { original: text, scrubbed: result.text });
     }, 30000);
 
     it('should scrub multiple different emails', async () => {
@@ -111,8 +109,6 @@ describe('PII Scrubber - Integration Tests (Deterministic, Non-Mocked)', () => {
 
       // Should contain PHONE placeholders
       expect(result.text).toMatch(/\[PHONE_\d+\]/);
-
-      console.log('Phone scrubbing:', result.text);
     }, 30000);
 
     it('should handle phone with +1 country code', async () => {
@@ -135,8 +131,6 @@ describe('PII Scrubber - Integration Tests (Deterministic, Non-Mocked)', () => {
       // SSN should be in replacements map
       expect(result.replacements['123-45-6789']).toBeDefined();
       expect(result.replacements['123-45-6789']).toMatch(/\[SSN_\d+\]/);
-
-      console.log('SSN scrubbing:', result);
     }, 30000);
 
     it('should scrub multiple SSNs', async () => {
@@ -271,19 +265,6 @@ Payment Card: 4532-1234-5678-9010
 
       const result = await piiScrubber.scrub(medicalNote);
 
-      console.log('\n=== ORIGINAL DOCUMENT LENGTH ===');
-      console.log(`${medicalNote.length} characters`);
-
-      console.log('\n=== SCRUBBED OUTPUT ===');
-      console.log(result.text);
-
-      console.log('\n=== REPLACEMENT MAP ===');
-      console.log(JSON.stringify(result.replacements, null, 2));
-
-      console.log(`\n=== STATISTICS ===`);
-      console.log(`Total entities scrubbed: ${result.count}`);
-      console.log(`Unique entities: ${Object.keys(result.replacements).length}`);
-
       // === VERIFY ALL STRUCTURAL PII TYPES ARE SCRUBBED ===
 
       // 1. Dates
@@ -358,8 +339,6 @@ Payment Card: 4532-1234-5678-9010
 
       // Verify count matches number of unique entities
       expect(result.count).toBe(Object.keys(result.replacements).length);
-
-      console.log('PIIMap:', result.replacements);
     }, 30000);
 
     it('should track all unique entities correctly', async () => {
@@ -402,8 +381,8 @@ Payment Card: 4532-1234-5678-9010
       // Text should remain intact (no structural PII)
       expect(result.text).toContain('treated');
       expect(result.text).toContain('discharged');
-      // May have 0 or minimal replacements
-      expect(result.count).toBeGreaterThanOrEqual(0);
+      // Should have no replacements as there is no PII
+      expect(result.count).toBe(0);
     }, 30000);
 
     it('should handle documents with only structural PII', async () => {
