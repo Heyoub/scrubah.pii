@@ -4,6 +4,7 @@
  */
 
 import { parse, format, isValid } from 'date-fns';
+import { Effect } from 'effect';
 import {
   DocumentFingerprint,
   DuplicateAnalysis,
@@ -13,6 +14,11 @@ import {
 } from './contentHasher';
 import { extractLabResults, formatLabTable, generateTrendAnalysis, LabPanel } from './labExtractor';
 import { ProcessedFile } from '../types';
+import {
+  collectGarbage,
+  calculateRelevanceScore,
+  RelevanceScore
+} from './medicalRelevanceFilter';
 
 export interface TimelineDocument {
   id: string;
@@ -23,6 +29,7 @@ export interface TimelineDocument {
   fingerprint: DocumentFingerprint;
   duplicationInfo?: DuplicateAnalysis;
   labData?: LabPanel;
+  relevanceScore?: RelevanceScore; // Clinical value assessment (GC-like filtering)
   documentNumber: number; // Position in chronological order
 }
 
@@ -125,15 +132,30 @@ export const extractPrimaryDate = (filename: string, content: string): Date => {
  */
 export const buildMasterTimeline = async (
   files: ProcessedFile[],
-  options?: { reverseChronological?: boolean }
+  options?: { reverseChronological?: boolean; skipRelevanceFilter?: boolean }
 ): Promise<MasterTimeline> => {
   const reverseOrder = options?.reverseChronological || false;
+  const skipFilter = options?.skipRelevanceFilter || false;
   console.log(`🗓️ Building master timeline (${reverseOrder ? 'newest → oldest' : 'oldest → newest'})...`);
+
+  // Step 0: Medical Relevance Filter (Garbage Collection)
+  let filteredFiles = files;
+  let gcResult = null;
+
+  if (!skipFilter) {
+    console.log(`🗑️  Running medical relevance filter on ${files.length} documents...`);
+    gcResult = await Effect.runPromise(collectGarbage(files));
+
+    // Use kept + demoted (exclude discarded garbage)
+    filteredFiles = [...gcResult.kept, ...gcResult.demoted];
+
+    console.log(`✅ GC complete: ${gcResult.kept.length} kept, ${gcResult.demoted.length} demoted, ${gcResult.discarded.length} discarded`);
+  }
 
   // Step 1: Generate fingerprints and temporal data
   const timelineDocuments: TimelineDocument[] = [];
 
-  for (const file of files) {
+  for (const file of filteredFiles) {
     if (!file.scrubbedText) continue;
 
     const date = extractPrimaryDate(file.originalName, file.scrubbedText);
@@ -143,6 +165,9 @@ export const buildMasterTimeline = async (
     const labData = fingerprint.documentType === DocumentType.LAB_REPORT
       ? extractLabResults(file.scrubbedText, date.toLocaleDateString())
       : undefined;
+
+    // Get relevance score from GC results (if available)
+    const relevanceScore = (file as any).relevanceScore as RelevanceScore | undefined;
 
     timelineDocuments.push({
       id: file.id,
@@ -156,6 +181,7 @@ export const buildMasterTimeline = async (
       content: file.scrubbedText,
       fingerprint,
       labData,
+      relevanceScore, // Attach relevance metadata
       documentNumber: 0 // Will be set after sorting
     });
   }
@@ -290,10 +316,23 @@ const generateTimelineMarkdown = (
 
     // Document header
     const emoji = getDocTypeEmoji(doc.fingerprint.documentType);
+
+    // Build relevance badge if available
+    let relevanceBadge = '';
+    if (doc.relevanceScore) {
+      const score = doc.relevanceScore.score;
+      const recommendation = doc.relevanceScore.recommendation;
+      const badge =
+        recommendation === 'keep' ? `🟢 High Value (${score}/100)` :
+        recommendation === 'demote' ? `🟡 Low Priority (${score}/100)` :
+        `🔴 Low Value (${score}/100)`;
+      relevanceBadge = ` | ${badge}`;
+    }
+
     sections.push(
       `### ${emoji} ${doc.displayDate} | ${doc.filename}\n` +
       `**Document #${doc.documentNumber}** | Type: ${formatDocTypeName(doc.fingerprint.documentType)} | ` +
-      `Hash: \`${doc.fingerprint.contentHash.substring(0, 8)}\`` +
+      `Hash: \`${doc.fingerprint.contentHash.substring(0, 8)}\`${relevanceBadge}` +
       relationNote + '\n'
     );
 

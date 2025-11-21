@@ -176,6 +176,98 @@ class PiiScrubberService {
     return this.loadPromise;
   }
 
+  /**
+   * PLACEHOLDER CLEANUP: Reduce spam and improve readability
+   *
+   * Consolidates excessive placeholders and removes artifacts
+   */
+  private consolidatePlaceholders(text: string): string {
+    let result = text;
+
+    // 1. Remove leading placeholder artifacts like "[PER_X] :" or "[PER_X] :Text"
+    result = result.replace(/\[([A-Z]+)_(\d+)\]\s*:\s*/g, '');
+
+    // 2. Consolidate consecutive placeholders (keep only spacing)
+    // [PHONE_1][ZIP_1] → [PHONE_1] [ZIP_1]
+    result = result.replace(/(\[[A-Z]+_\d+\])(\[[A-Z]+_\d+\])/g, '$1 $2');
+
+    // 3. Remove placeholder fragments at line starts
+    result = result.replace(/^\[([A-Z]+)_(\d+)\]\s*/gm, '');
+
+    // 4. Clean up excessive consecutive placeholders (more than 3)
+    // [PER_1] [PER_2] [PER_3] [PER_4] → [REDACTED_INFO]
+    result = result.replace(/((\[[A-Z]+_\d+\]\s*){4,})/g, '[REDACTED_INFO] ');
+
+    // 5. Remove stray colons after placeholder removal
+    result = result.replace(/^\s*:\s*/gm, '');
+
+    return result;
+  }
+
+  /**
+   * SMART TRANSFORMATION: Convert DOB → Age
+   *
+   * Replaces "DOB: 01/15/1985" with "Age: 40 years" (calculated)
+   * This preserves clinical utility while removing PII
+   */
+  private transformDOBtoAge(text: string): string {
+    // Patterns for DOB labels
+    const dobPatterns = [
+      /\b(DOB|D\.O\.B\.|Date of Birth|Birth Date)\s*[:：]\s*(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})/gi,
+      /\b(DOB|D\.O\.B\.|Date of Birth|Birth Date)\s*[:：]?\s*(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})/gi
+    ];
+
+    let result = text;
+
+    for (const pattern of dobPatterns) {
+      result = result.replace(pattern, (match, label, dateStr) => {
+        try {
+          // Parse date (supports MM/DD/YYYY, MM-DD-YYYY, etc.)
+          const parts = dateStr.split(/[\/-]/);
+          let month: number, day: number, year: number;
+
+          if (parts.length === 3) {
+            // Assume MM/DD/YYYY format
+            month = parseInt(parts[0], 10);
+            day = parseInt(parts[1], 10);
+            year = parseInt(parts[2], 10);
+
+            // Handle 2-digit years
+            if (year < 100) {
+              year += year < 50 ? 2000 : 1900;
+            }
+
+            // Validate date
+            if (month < 1 || month > 12 || day < 1 || day > 31 || year < 1900 || year > new Date().getFullYear()) {
+              return match; // Keep original if invalid
+            }
+
+            // Calculate age
+            const birthDate = new Date(year, month - 1, day);
+            const today = new Date();
+            let age = today.getFullYear() - birthDate.getFullYear();
+            const monthDiff = today.getMonth() - birthDate.getMonth();
+
+            // Adjust if birthday hasn't occurred this year
+            if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+              age--;
+            }
+
+            // Return age transformation
+            return `Age: ${age} years`;
+          }
+        } catch (e) {
+          // If parsing fails, keep original
+          console.warn(`Failed to parse DOB: ${dateStr}`, e);
+        }
+
+        return match; // Fallback to original
+      });
+    }
+
+    return result;
+  }
+
   public async scrub(text: string): Promise<ScrubResult> {
     if (!this.pipe) await this.loadModel();
 
@@ -186,11 +278,13 @@ class PiiScrubberService {
     const entityToPlaceholder: Record<string, string> = {};
     const counters = { PER: 0, LOC: 0, ORG: 0, EMAIL: 0, PHONE: 0, ID: 0, DATE: 0 };
 
+    // --- PHASE 0: SMART TRANSFORMATIONS ---
+    // Convert DOB → Age (preserves clinical utility while removing PII)
+    let interimText = this.transformDOBtoAge(text);
+
     // --- PHASE 1: REGEX PRE-PASS ---
     // We replace structural PII first to prevent BERT from getting confused or splitting them.
     // We replace them with unique temporary masks which we can either keep or format later.
-    
-    let interimText = text;
 
     const runRegex = (type: string, regex: RegExp, prefix: string) => {
         interimText = interimText.replace(regex, (match) => {
@@ -369,8 +463,11 @@ class PiiScrubberService {
     console.log(`✅ All passes complete in ${totalProcessingTime}s`);
     console.log(`📊 Total: ${totalSecondPassReplacements} entities | Confidence: ${validation.confidenceScore.toFixed(1)}%`);
 
+    // Final cleanup: Consolidate placeholders to reduce spam
+    const finalText = this.consolidatePlaceholders(validatedText);
+
     return {
-      text: validatedText,
+      text: finalText,
       replacements: globalReplacements,
       count: totalSecondPassReplacements
     };
