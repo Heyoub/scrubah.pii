@@ -343,7 +343,7 @@ export const generateYAML = (
     builder.addBlankLine();
 
     // Timeline events (main content)
-    generateTimelineSection(builder, timeline.timeline);
+    generateTimelineSection(builder, timeline.timeline as TimelineEntry[]);
 
     // Medications
     generateMedicationsSection(builder, timeline);
