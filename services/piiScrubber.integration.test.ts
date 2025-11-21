@@ -351,11 +351,11 @@ Payment Card: ${TEST_PII.CARD_VISA}
       const text = `Email1: ${TEST_PII.EMAIL_PRIMARY}, Email2: ${TEST_PII.EMAIL_SECONDARY}, Same: ${TEST_PII.EMAIL_PRIMARY}`;
       const result = await piiScrubber.scrub(text);
 
-      // Should have 2 unique emails
+      // Should have 2 unique emails in replacements map
       expect(Object.keys(result.replacements).length).toBe(2);
 
-      // count is unique entities, not occurrences
-      expect(result.count).toBe(2);
+      // Count should equal unique entities (2), not total occurrences (3)
+      expect(result.count).toBe(2); // count tracks unique entities
 
       // Same email should have same placeholder
       const placeholderForPrimary = result.replacements[TEST_PII.EMAIL_PRIMARY];
