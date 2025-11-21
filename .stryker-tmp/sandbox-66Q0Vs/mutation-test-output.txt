@@ -1,8 +1,0 @@
-
-> scrubah-pii@1.0.0 test:mutation
-> stryker run
-
-[32m14:30:21 (5984) INFO ProjectReader[39m No incremental result file found at .stryker-tmp/incremental.json, a full mutation testing run will be performed.
-[32m14:30:21 (5984) INFO ProjectReader[39m Found 1 of 69 file(s) to be mutated.
-[32m14:30:22 (5984) INFO Instrumenter[39m Instrumented 1 source file(s) with 257 mutant(s)
-[32m14:30:22 (5984) INFO ConcurrencyTokenProvider[39m Creating 6 checker process(es) and 5 test runner process(es).

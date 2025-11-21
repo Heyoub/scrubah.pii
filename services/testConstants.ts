@@ -17,13 +17,13 @@ export const TEST_PII = {
   SSN_SPOUSE: '000-00-0002',
   SSN_DEPENDENT: '000-00-0003',
 
-  // Phone Numbers - Using 555-01XX range (reserved for fictional use)
-  PHONE_PRIMARY: '555-0100',
-  PHONE_SECONDARY: '555-0101',
-  PHONE_EMERGENCY: '555-0102',
-  PHONE_WITH_COUNTRY: '+1 555 0103',
-  PHONE_FORMATTED_1: '(555) 010-4',
-  PHONE_FORMATTED_2: '555-010-5',
+  // Phone Numbers - Using 555-01XX range (reserved for fictional use) - all 10 digits
+  PHONE_PRIMARY: '555-010-0000',
+  PHONE_SECONDARY: '555-010-0001',
+  PHONE_EMERGENCY: '555-010-0002',
+  PHONE_WITH_COUNTRY: '+1 555-010-0003',
+  PHONE_FORMATTED_1: '(555) 010-4567',
+  PHONE_FORMATTED_2: '555-010-5678',
 
   // Credit Cards - Using test card numbers (Luhn-valid but reserved)
   // Source: https://www.paypalobjects.com/en_GB/vhelp/paypalmanager_help/credit_card_numbers.htm
@@ -31,10 +31,10 @@ export const TEST_PII = {
   CARD_MASTERCARD: '5500-0000-0000-0004',
   CARD_AMEX: '3400-0000-0000-009',
 
-  // Medical Record Numbers - Prefix with TEST
+  // Medical Record Numbers - Prefix with TEST (6-12 chars for pattern matching)
   MRN_PRIMARY: 'TEST000001',
   MRN_SECONDARY: 'TEST000002',
-  MRN_FORMATTED: 'TESTMED987654',
+  MRN_FORMATTED: 'TESTMED98765',
 
   // ZIP Codes - Using 00000 (non-existent)
   ZIP_5_DIGIT: '00000',

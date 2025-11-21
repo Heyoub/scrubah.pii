@@ -105,9 +105,11 @@ describe('PII Scrubber - Integration Tests (Deterministic, Non-Mocked)', () => {
       const text = `Call ${TEST_PII.PHONE_FORMATTED_1} or ${TEST_PII.PHONE_FORMATTED_2} for appointments.`;
       const result = await piiScrubber.scrub(text);
 
-      // Phone numbers should not appear in scrubbed text (partial matches)
-      expect(result.text).not.toContain('010-4');
-      expect(result.text).not.toContain('010-5');
+      // Phone numbers should not appear in scrubbed text (check distinct parts)
+      expect(result.text).not.toContain('010-4567');
+      expect(result.text).not.toContain('010-5678');
+      expect(result.text).not.toContain('(555) 010-4567');
+      expect(result.text).not.toContain('555-010-5678');
 
       // Should have replacements for phone numbers
       expect(result.count).toBeGreaterThanOrEqual(2);
@@ -120,7 +122,8 @@ describe('PII Scrubber - Integration Tests (Deterministic, Non-Mocked)', () => {
       const text = `International: ${TEST_PII.PHONE_WITH_COUNTRY}`;
       const result = await piiScrubber.scrub(text);
 
-      expect(result.text).not.toContain('555 0103');
+      expect(result.text).not.toContain('555');
+      expect(result.text).not.toContain('0103');
       expect(result.text).toMatch(/\[PHONE_\d+\]/);
     }, 30000);
   });

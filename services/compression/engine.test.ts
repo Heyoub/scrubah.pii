@@ -347,11 +347,13 @@ describe('Compression Engine', () => {
     });
 
     it('should calculate compression ratio correctly', async () => {
+      // Create a large document with actual medical events for realistic compression
+      const medicalEvent = 'Patient had visit on 01/15/2024 for routine checkup. ';
       const docs: ProcessedDocument[] = [
         {
           id: 'doc1',
           filename: 'large.pdf',
-          text: 'A'.repeat(10000), // ~10KB
+          text: medicalEvent.repeat(100), // ~6KB with medical events
           metadata: {},
         },
       ];
