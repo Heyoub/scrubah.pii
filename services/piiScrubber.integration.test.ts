@@ -369,7 +369,7 @@ Payment Card: 4532-1234-5678-9010
       // Should have 2 unique emails
       expect(Object.keys(result.replacements).length).toBe(2);
 
-      // But count should be 3 (3 occurrences)
+      // There are 3 occurrences, but only 2 unique emails
       expect(result.count).toBe(2); // count is unique entities, not occurrences
 
       // Same email should have same placeholder
