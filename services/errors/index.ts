@@ -38,9 +38,11 @@ export interface BaseError {
 export class PDFParseError extends Data.TaggedError("PDFParseError")<{
   readonly file: string;
   readonly page?: number;
-  readonly reason: string;
+  readonly reason:string;
   readonly suggestion: string;
 }> {
+  readonly timestamp: string = new Date().toISOString();
+
   get message(): string {
     const pageInfo = this.page ? ` (page ${this.page})` : "";
     return `Failed to parse PDF ${this.file}${pageInfo}: ${this.reason}`;
@@ -58,7 +60,7 @@ export class PDFParseError extends Data.TaggedError("PDFParseError")<{
       reason: this.reason,
       suggestion: this.suggestion,
       recoverable: this.recoverable,
-      timestamp: new Date().toISOString(),
+      timestamp: this.timestamp,
     };
   }
 }
