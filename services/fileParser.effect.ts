@@ -232,11 +232,15 @@ const parsePDFPage = (
 
         // Create new line (immutable)
         const index = lines.indexOf(existingLine);
-        lines[index] = {
-          y: existingLine.y,
-          text: newText,
-          lastX: x + width,
-        };
+        lines = [
+          ...lines.slice(0, index),
+          {
+            y: existingLine.y,
+            text: newText,
+            lastX: x + width,
+          },
+          ...lines.slice(index + 1),
+        ];
       } else {
         lines.push({ y, text, lastX: x + width });
       }
