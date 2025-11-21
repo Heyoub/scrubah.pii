@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { piiScrubber } from './piiScrubber';
 import { PATTERNS } from './piiScrubber';
+import { TEST_PII } from './testConstants';
+import { testLogger } from './testLogger';
 
 /**
  * COMPREHENSIVE INTEGRATION TESTS FOR PII SCRUBBING
@@ -55,37 +57,35 @@ describe('PII Scrubber - Integration Tests (Deterministic, Non-Mocked)', () => {
 
   describe('Email Address Scrubbing - Structural Only (Deterministic)', () => {
     it('should scrub single email address', async () => {
-      const text = 'Contact patient at john.doe@example.com for follow-up.';
+      const text = `Contact patient at ${TEST_PII.EMAIL_PRIMARY} for follow-up.`;
       const result = await piiScrubber.scrub(text);
 
       // Email should not appear in scrubbed text
-      expect(result.text).not.toContain('john.doe@example.com');
+      expect(result.text).not.toContain(TEST_PII.EMAIL_PRIMARY);
 
       // Email should be in replacements map
-      expect(result.replacements['john.doe@example.com']).toBeDefined();
-      expect(result.replacements['john.doe@example.com']).toMatch(/\[EMAIL_\d+\]/);
+      expect(result.replacements[TEST_PII.EMAIL_PRIMARY]).toBeDefined();
+      expect(result.replacements[TEST_PII.EMAIL_PRIMARY]).toMatch(/\[EMAIL_\d+\]/);
 
       // Count should be at least 1
       expect(result.count).toBeGreaterThanOrEqual(1);
-
-      console.log('Email scrubbing:', { original: text, scrubbed: result.text });
     }, 30000);
 
     it('should scrub multiple different emails', async () => {
-      const text = 'Primary: alice@test.com, Secondary: bob@example.org';
+      const text = `Primary: ${TEST_PII.EMAIL_PRIMARY}, Secondary: ${TEST_PII.EMAIL_SECONDARY}`;
       const result = await piiScrubber.scrub(text);
 
-      expect(result.text).not.toContain('alice@test.com');
-      expect(result.text).not.toContain('bob@example.org');
+      expect(result.text).not.toContain(TEST_PII.EMAIL_PRIMARY);
+      expect(result.text).not.toContain(TEST_PII.EMAIL_SECONDARY);
       expect(result.count).toBeGreaterThanOrEqual(2);
     }, 30000);
 
     it('should maintain placeholder consistency for repeated emails', async () => {
-      const text = 'Email john@test.com twice: john@test.com and john@test.com again.';
+      const text = `Email ${TEST_PII.EMAIL_REPEATED} twice: ${TEST_PII.EMAIL_REPEATED} and ${TEST_PII.EMAIL_REPEATED} again.`;
       const result = await piiScrubber.scrub(text);
 
       // Should use same placeholder for same email
-      const placeholder = result.replacements['john@test.com'];
+      const placeholder = result.replacements[TEST_PII.EMAIL_REPEATED];
       expect(placeholder).toBeDefined();
 
       // Count occurrences of placeholder in result text
@@ -93,138 +93,138 @@ describe('PII Scrubber - Integration Tests (Deterministic, Non-Mocked)', () => {
       const placeholderCount = (result.text.match(placeholderRegex) || []).length;
       expect(placeholderCount).toBe(3); // Should appear 3 times
 
-      console.log('Consistency check:', { placeholder, count: placeholderCount });
+      testLogger.info('test:placeholder-consistency', {
+        placeholderFormat: placeholder,
+        occurrences: placeholderCount
+      });
     }, 30000);
   });
 
   describe('Phone Number Scrubbing - All Formats', () => {
     it('should scrub various phone formats', async () => {
-      const text = 'Call (555) 123-4567 or 555-987-6543 for appointments.';
+      const text = `Call ${TEST_PII.PHONE_FORMATTED_1} or ${TEST_PII.PHONE_FORMATTED_2} for appointments.`;
       const result = await piiScrubber.scrub(text);
 
-      // Phone numbers should not appear in scrubbed text
-      expect(result.text).not.toContain('123-4567');
-      expect(result.text).not.toContain('987-6543');
+      // Phone numbers should not appear in scrubbed text (partial matches)
+      expect(result.text).not.toContain('010-4');
+      expect(result.text).not.toContain('010-5');
 
       // Should have replacements for phone numbers
       expect(result.count).toBeGreaterThanOrEqual(2);
 
       // Should contain PHONE placeholders
       expect(result.text).toMatch(/\[PHONE_\d+\]/);
-
-      console.log('Phone scrubbing:', result.text);
     }, 30000);
 
     it('should handle phone with +1 country code', async () => {
-      const text = 'International: +1 617 555 1234';
+      const text = `International: ${TEST_PII.PHONE_WITH_COUNTRY}`;
       const result = await piiScrubber.scrub(text);
 
-      expect(result.text).not.toContain('617 555 1234');
+      expect(result.text).not.toContain('555 0103');
       expect(result.text).toMatch(/\[PHONE_\d+\]/);
     }, 30000);
   });
 
   describe('SSN Scrubbing', () => {
     it('should scrub SSN and track in PIIMap', async () => {
-      const text = 'Patient SSN: 123-45-6789 for insurance verification.';
+      const text = `Patient SSN: ${TEST_PII.SSN_PRIMARY} for insurance verification.`;
       const result = await piiScrubber.scrub(text);
 
       // SSN should not appear in scrubbed text
-      expect(result.text).not.toContain('123-45-6789');
+      expect(result.text).not.toContain(TEST_PII.SSN_PRIMARY);
 
       // SSN should be in replacements map
-      expect(result.replacements['123-45-6789']).toBeDefined();
-      expect(result.replacements['123-45-6789']).toMatch(/\[SSN_\d+\]/);
-
-      console.log('SSN scrubbing:', result);
+      expect(result.replacements[TEST_PII.SSN_PRIMARY]).toBeDefined();
+      expect(result.replacements[TEST_PII.SSN_PRIMARY]).toMatch(/\[SSN_\d+\]/);
     }, 30000);
 
     it('should scrub multiple SSNs', async () => {
-      const text = 'Primary: 111-22-3333, Spouse: 444-55-6666';
+      const text = `Primary: ${TEST_PII.SSN_PRIMARY}, Spouse: ${TEST_PII.SSN_SPOUSE}`;
       const result = await piiScrubber.scrub(text);
 
-      expect(result.text).not.toContain('111-22-3333');
-      expect(result.text).not.toContain('444-55-6666');
+      expect(result.text).not.toContain(TEST_PII.SSN_PRIMARY);
+      expect(result.text).not.toContain(TEST_PII.SSN_SPOUSE);
       expect(result.count).toBeGreaterThanOrEqual(2);
     }, 30000);
   });
 
   describe('Credit Card Scrubbing', () => {
     it('should scrub credit card with dashes', async () => {
-      const text = 'Payment card: 4532-1234-5678-9010 on file.';
+      const text = `Payment card: ${TEST_PII.CARD_VISA} on file.`;
       const result = await piiScrubber.scrub(text);
 
-      expect(result.text).not.toContain('4532-1234-5678-9010');
+      expect(result.text).not.toContain(TEST_PII.CARD_VISA);
       expect(result.text).toMatch(/\[CARD_\d+\]/);
     }, 30000);
 
     it('should scrub credit card with spaces', async () => {
-      const text = 'Card number: 4532 1234 5678 9010';
+      const cardWithSpaces = TEST_PII.CARD_MASTERCARD.replace(/-/g, ' ');
+      const text = `Card number: ${cardWithSpaces}`;
       const result = await piiScrubber.scrub(text);
 
-      expect(result.text).not.toContain('4532 1234 5678 9010');
+      expect(result.text).not.toContain(cardWithSpaces);
       expect(result.text).toMatch(/\[CARD_\d+\]/);
     }, 30000);
 
     it('should scrub credit card without separators', async () => {
-      const text = 'Card: 4532123456789010';
+      const cardNoSeparators = TEST_PII.CARD_VISA.replace(/-/g, '');
+      const text = `Card: ${cardNoSeparators}`;
       const result = await piiScrubber.scrub(text);
 
-      expect(result.text).not.toContain('4532123456789010');
+      expect(result.text).not.toContain(cardNoSeparators);
       expect(result.text).toMatch(/\[CARD_\d+\]/);
     }, 30000);
   });
 
   describe('ZIP Code Scrubbing', () => {
     it('should scrub 5-digit ZIP code', async () => {
-      const text = 'Located in ZIP 12345';
+      const text = `Located in ZIP ${TEST_PII.ZIP_5_DIGIT}`;
       const result = await piiScrubber.scrub(text);
 
-      expect(result.text).not.toContain('12345');
+      expect(result.text).not.toContain(TEST_PII.ZIP_5_DIGIT);
       expect(result.text).toMatch(/\[ZIP_\d+\]/);
     }, 30000);
 
     it('should scrub ZIP+4 format', async () => {
-      const text = 'Mailing address: Boston, MA 02101-1234';
+      const text = `Mailing address: Testville, TS ${TEST_PII.ZIP_PLUS_4}`;
       const result = await piiScrubber.scrub(text);
 
-      expect(result.text).not.toContain('02101-1234');
+      expect(result.text).not.toContain(TEST_PII.ZIP_PLUS_4);
       expect(result.text).toMatch(/\[ZIP_\d+\]/);
     }, 30000);
   });
 
   describe('Medical Record Number (MRN) Scrubbing', () => {
     it('should scrub MRN with MRN keyword', async () => {
-      const text = 'Patient MRN: ABC123456 admitted today.';
+      const text = `Patient MRN: ${TEST_PII.MRN_PRIMARY} admitted today.`;
       const result = await piiScrubber.scrub(text);
 
-      expect(result.text).not.toContain('ABC123456');
-      expect(result.replacements['ABC123456']).toBeDefined();
-      expect(result.replacements['ABC123456']).toMatch(/\[MRN_\d+\]/);
+      expect(result.text).not.toContain(TEST_PII.MRN_PRIMARY);
+      expect(result.replacements[TEST_PII.MRN_PRIMARY]).toBeDefined();
+      expect(result.replacements[TEST_PII.MRN_PRIMARY]).toMatch(/\[MRN_\d+\]/);
     }, 30000);
 
     it('should scrub MRN with various keywords', async () => {
       const text = `
-        MRN: 1234567
-        Medical Record Number: XYZ890123
-        Patient ID: ABC456789
-        Chart Number: DEF111222
+        MRN: ${TEST_PII.MRN_PRIMARY}
+        Medical Record Number: ${TEST_PII.MRN_SECONDARY}
+        Patient ID: ${TEST_PII.MRN_FORMATTED}
+        Chart Number: ${TEST_PII.MRN_PRIMARY}
       `;
       const result = await piiScrubber.scrub(text);
 
-      expect(result.text).not.toContain('1234567');
-      expect(result.text).not.toContain('XYZ890123');
-      expect(result.text).not.toContain('ABC456789');
-      expect(result.text).not.toContain('DEF111222');
+      expect(result.text).not.toContain(TEST_PII.MRN_PRIMARY);
+      expect(result.text).not.toContain(TEST_PII.MRN_SECONDARY);
+      expect(result.text).not.toContain(TEST_PII.MRN_FORMATTED);
 
-      expect(result.count).toBeGreaterThanOrEqual(4);
+      expect(result.count).toBeGreaterThanOrEqual(3);
     }, 30000);
 
     it('should handle MRN with different separators', async () => {
       const tests = [
-        'MRN: 123456',
-        'MRN:123456',
-        'MRN 123456',
+        `MRN: ${TEST_PII.MRN_PRIMARY}`,
+        `MRN:${TEST_PII.MRN_PRIMARY}`,
+        `MRN ${TEST_PII.MRN_PRIMARY}`,
       ];
 
       for (const text of tests) {
@@ -240,80 +240,67 @@ describe('PII Scrubber - Integration Tests (Deterministic, Non-Mocked)', () => {
       const medicalNote = `
 PATIENT INFORMATION
 ===================
-Date of Birth: 03/15/1982
-MRN: MED987654
-SSN: 456-78-9012
-Phone: (617) 555-1234
-Email: patient.email@hospital.com
-Address: 123 Main Street, Boston, MA 02138
+Date of Birth: ${TEST_PII.DATE_BIRTH}
+MRN: ${TEST_PII.MRN_FORMATTED}
+SSN: ${TEST_PII.SSN_PRIMARY}
+Phone: ${TEST_PII.PHONE_PRIMARY}
+Email: ${TEST_PII.EMAIL_PRIMARY}
+Address: 123 Test Street, Testville, TS ${TEST_PII.ZIP_REAL_LOOKING}
 
 VISIT SUMMARY
 =============
-Visit Date: 12/20/2024
-Admission Date: 12/19/2024
-Discharge Date: 12/25/2024
+Visit Date: ${TEST_PII.DATE_VISIT}
+Admission Date: ${TEST_PII.DATE_PAST}
+Discharge Date: ${TEST_PII.DATE_FUTURE}
 
 INSURANCE
 =========
-Policy Number: 1234-5678-9012-3456
-Member ID: XYZ789012
+Policy Number: ${TEST_PII.CARD_MASTERCARD}
+Member ID: ${TEST_PII.MRN_SECONDARY}
 
 EMERGENCY CONTACT
 =================
-Phone: 617-555-9876
-Email: emergency.contact@email.com
+Phone: ${TEST_PII.PHONE_EMERGENCY}
+Email: ${TEST_PII.EMAIL_EMERGENCY}
 
 BILLING
 =======
-ZIP Code: 02138-1001
-Payment Card: 4532-1234-5678-9010
+ZIP Code: ${TEST_PII.ZIP_PLUS_4}
+Payment Card: ${TEST_PII.CARD_VISA}
       `;
 
       const result = await piiScrubber.scrub(medicalNote);
 
-      console.log('\n=== ORIGINAL DOCUMENT LENGTH ===');
-      console.log(`${medicalNote.length} characters`);
-
-      console.log('\n=== SCRUBBED OUTPUT ===');
-      console.log(result.text);
-
-      console.log('\n=== REPLACEMENT MAP ===');
-      console.log(JSON.stringify(result.replacements, null, 2));
-
-      console.log(`\n=== STATISTICS ===`);
-      console.log(`Total entities scrubbed: ${result.count}`);
-      console.log(`Unique entities: ${Object.keys(result.replacements).length}`);
-
       // === VERIFY ALL STRUCTURAL PII TYPES ARE SCRUBBED ===
 
       // 1. Dates
-      expect(result.text).not.toContain('03/15/1982');
-      expect(result.text).not.toContain('12/20/2024');
-      expect(result.text).not.toContain('12/19/2024');
-      expect(result.text).not.toContain('12/25/2024');
+      expect(result.text).not.toContain(TEST_PII.DATE_BIRTH);
+      expect(result.text).not.toContain(TEST_PII.DATE_VISIT);
+      expect(result.text).not.toContain(TEST_PII.DATE_PAST);
+      expect(result.text).not.toContain(TEST_PII.DATE_FUTURE);
 
       // 2. MRNs
-      expect(result.text).not.toContain('MED987654');
-      expect(result.text).not.toContain('XYZ789012');
+      expect(result.text).not.toContain(TEST_PII.MRN_FORMATTED);
+      expect(result.text).not.toContain(TEST_PII.MRN_SECONDARY);
 
       // 3. SSN
-      expect(result.text).not.toContain('456-78-9012');
+      expect(result.text).not.toContain(TEST_PII.SSN_PRIMARY);
 
       // 4. Phone Numbers
-      expect(result.text).not.toContain('617-555-1234');
-      expect(result.text).not.toContain('617-555-9876');
+      expect(result.text).not.toContain(TEST_PII.PHONE_PRIMARY);
+      expect(result.text).not.toContain(TEST_PII.PHONE_EMERGENCY);
 
       // 5. Emails
-      expect(result.text).not.toContain('patient.email@hospital.com');
-      expect(result.text).not.toContain('emergency.contact@email.com');
+      expect(result.text).not.toContain(TEST_PII.EMAIL_PRIMARY);
+      expect(result.text).not.toContain(TEST_PII.EMAIL_EMERGENCY);
 
       // 6. ZIP Codes
-      expect(result.text).not.toContain('02138');
-      expect(result.text).not.toContain('02138-1001');
+      expect(result.text).not.toContain(TEST_PII.ZIP_REAL_LOOKING);
+      expect(result.text).not.toContain(TEST_PII.ZIP_PLUS_4);
 
       // 7. Credit Card / Policy Number
-      expect(result.text).not.toContain('1234-5678-9012-3456');
-      expect(result.text).not.toContain('4532-1234-5678-9010');
+      expect(result.text).not.toContain(TEST_PII.CARD_MASTERCARD);
+      expect(result.text).not.toContain(TEST_PII.CARD_VISA);
 
       // === VERIFY PLACEHOLDERS EXIST ===
       expect(result.text).toMatch(/\[EMAIL_\d+\]/);
@@ -330,9 +317,9 @@ Payment Card: 4532-1234-5678-9010
       expect(Object.keys(result.replacements).length).toBeGreaterThan(10);
 
       // === VERIFY SPECIFIC REPLACEMENTS IN MAP ===
-      expect(result.replacements['456-78-9012']).toBeDefined();
-      expect(result.replacements['patient.email@hospital.com']).toBeDefined();
-      expect(result.replacements['MED987654']).toBeDefined();
+      expect(result.replacements[TEST_PII.SSN_PRIMARY]).toBeDefined();
+      expect(result.replacements[TEST_PII.EMAIL_PRIMARY]).toBeDefined();
+      expect(result.replacements[TEST_PII.MRN_FORMATTED]).toBeDefined();
 
       // === VERIFY TEXT STRUCTURE PRESERVED ===
       expect(result.text).toContain('PATIENT INFORMATION');
@@ -345,7 +332,7 @@ Payment Card: 4532-1234-5678-9010
 
   describe('PIIMap Verification', () => {
     it('should return accurate PIIMap with all original->placeholder mappings', async () => {
-      const text = 'Patient john@test.com, SSN: 111-22-3333, Phone: 555-1234567';
+      const text = `Patient ${TEST_PII.EMAIL_PRIMARY}, SSN: ${TEST_PII.SSN_PRIMARY}, Phone: ${TEST_PII.PHONE_PRIMARY}`;
       const result = await piiScrubber.scrub(text);
 
       // Verify replacements map structure
@@ -353,17 +340,15 @@ Payment Card: 4532-1234-5678-9010
       expect(typeof result.replacements).toBe('object');
 
       // Verify specific mappings
-      expect(result.replacements['john@test.com']).toMatch(/\[EMAIL_\d+\]/);
-      expect(result.replacements['111-22-3333']).toMatch(/\[SSN_\d+\]/);
+      expect(result.replacements[TEST_PII.EMAIL_PRIMARY]).toMatch(/\[EMAIL_\d+\]/);
+      expect(result.replacements[TEST_PII.SSN_PRIMARY]).toMatch(/\[SSN_\d+\]/);
 
       // Verify count matches number of unique entities
       expect(result.count).toBe(Object.keys(result.replacements).length);
-
-      console.log('PIIMap:', result.replacements);
     }, 30000);
 
     it('should track all unique entities correctly', async () => {
-      const text = 'Email1: a@b.com, Email2: c@d.com, Same: a@b.com';
+      const text = `Email1: ${TEST_PII.EMAIL_PRIMARY}, Email2: ${TEST_PII.EMAIL_SECONDARY}, Same: ${TEST_PII.EMAIL_PRIMARY}`;
       const result = await piiScrubber.scrub(text);
 
       // Should have 2 unique emails in replacements map
@@ -373,8 +358,8 @@ Payment Card: 4532-1234-5678-9010
       expect(result.count).toBe(2); // count tracks unique entities
 
       // Same email should have same placeholder
-      const placeholderForA = result.replacements['a@b.com'];
-      const occurrences = (result.text.match(new RegExp(placeholderForA.replace(/[[\]]/g, '\\$&'), 'g')) || []).length;
+      const placeholderForPrimary = result.replacements[TEST_PII.EMAIL_PRIMARY];
+      const occurrences = (result.text.match(new RegExp(placeholderForPrimary.replace(/[[\]]/g, '\\$&'), 'g')) || []).length;
       expect(occurrences).toBe(2);
     }, 30000);
   });
@@ -402,23 +387,23 @@ Payment Card: 4532-1234-5678-9010
       // Text should remain intact (no structural PII)
       expect(result.text).toContain('treated');
       expect(result.text).toContain('discharged');
-      // May have 0 or minimal replacements
-      expect(result.count).toBeGreaterThanOrEqual(0);
+      // Should have no replacements as there is no PII
+      expect(result.count).toBe(0);
     }, 30000);
 
     it('should handle documents with only structural PII', async () => {
-      const text = 'Email: test@example.com, Phone: 555-1234567, ZIP: 12345';
+      const text = `Email: ${TEST_PII.EMAIL_PRIMARY}, Phone: ${TEST_PII.PHONE_PRIMARY}, ZIP: ${TEST_PII.ZIP_5_DIGIT}`;
       const result = await piiScrubber.scrub(text);
 
-      expect(result.text).not.toContain('test@example.com');
-      expect(result.text).not.toContain('555-1234567');
-      expect(result.text).not.toContain('12345');
+      expect(result.text).not.toContain(TEST_PII.EMAIL_PRIMARY);
+      expect(result.text).not.toContain(TEST_PII.PHONE_PRIMARY);
+      expect(result.text).not.toContain(TEST_PII.ZIP_5_DIGIT);
 
       expect(result.count).toBeGreaterThanOrEqual(3);
     }, 30000);
 
     it('should not double-scrub placeholders', async () => {
-      const text = 'Patient email: john@test.com and backup: jane@test.com';
+      const text = `Patient email: ${TEST_PII.EMAIL_PRIMARY} and backup: ${TEST_PII.EMAIL_SECONDARY}`;
       const result = await piiScrubber.scrub(text);
 
       // Should have placeholders, not placeholder-of-placeholder
@@ -439,7 +424,7 @@ Payment Card: 4532-1234-5678-9010
   describe('Performance and Scalability', () => {
     it('should handle large documents efficiently', async () => {
       // Create a large document with repeated PII
-      const paragraph = 'Contact: john.smith@hospital.com or (555) 123-4567. MRN: ABC123456. SSN: 123-45-6789. ZIP: 12345. ';
+      const paragraph = `Contact: ${TEST_PII.EMAIL_PRIMARY} or ${TEST_PII.PHONE_PRIMARY}. MRN: ${TEST_PII.MRN_PRIMARY}. SSN: ${TEST_PII.SSN_PRIMARY}. ZIP: ${TEST_PII.ZIP_5_DIGIT}. `;
       const largeDoc = paragraph.repeat(100); // ~14KB of text
 
       const startTime = performance.now();
@@ -452,33 +437,36 @@ Payment Card: 4532-1234-5678-9010
       // Should scrub all instances (5 unique PII types × 1 = 5 unique entities)
       expect(result.count).toBeGreaterThanOrEqual(5);
 
-      console.log(`\nPerformance Test:`);
-      console.log(`- Document size: ${largeDoc.length} characters`);
-      console.log(`- Processing time: ${(processingTime / 1000).toFixed(2)}s`);
-      console.log(`- Entities scrubbed: ${result.count}`);
-      console.log(`- Speed: ${(largeDoc.length / processingTime * 1000).toFixed(0)} chars/sec`);
+      testLogger.perf('test:large-document', {
+        duration: Math.round(processingTime),
+        size: largeDoc.length,
+        count: result.count
+      });
     }, 60000);
 
     it('should maintain consistency in large documents', async () => {
       const sections = [
-        'Patient: alice.j@test.com, DOB: 05/12/1990',
-        'Phone: 650-555-1234, Email: alice.j@test.com', // Repeated email
-        'Insurance Policy: 9876-5432-1098-7654',
-        'MRN: XYZ789012, SSN: 987-65-4321, ZIP: 94305',
-        'Emergency contact: alice.j@test.com', // Repeated email again
+        `Patient: ${TEST_PII.EMAIL_PRIMARY}, DOB: ${TEST_PII.DATE_BIRTH}`,
+        `Phone: ${TEST_PII.PHONE_SECONDARY}, Email: ${TEST_PII.EMAIL_PRIMARY}`, // Repeated email
+        `Insurance Policy: ${TEST_PII.CARD_MASTERCARD}`,
+        `MRN: ${TEST_PII.MRN_PRIMARY}, SSN: ${TEST_PII.SSN_SPOUSE}, ZIP: ${TEST_PII.ZIP_REAL_LOOKING}`,
+        `Emergency contact: ${TEST_PII.EMAIL_PRIMARY}`, // Repeated email again
       ];
 
       const fullDoc = sections.join('\n\n');
       const result = await piiScrubber.scrub(fullDoc);
 
       // Repeated email should use same placeholder
-      const emailPlaceholder = result.replacements['alice.j@test.com'];
+      const emailPlaceholder = result.replacements[TEST_PII.EMAIL_PRIMARY];
       expect(emailPlaceholder).toBeDefined();
 
       const emailCount = (result.text.match(new RegExp(emailPlaceholder.replace(/[[\]]/g, '\\$&'), 'g')) || []).length;
       expect(emailCount).toBe(3); // Should appear 3 times with same placeholder
 
-      console.log('Consistency test:', { emailPlaceholder, occurrences: emailCount });
+      testLogger.info('test:consistency-large-doc', {
+        placeholderFormat: emailPlaceholder,
+        occurrences: emailCount
+      });
     }, 60000);
   });
 });
