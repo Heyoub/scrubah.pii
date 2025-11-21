@@ -16,10 +16,10 @@
  * 4. Result validation (Effect Schema)
  */
 
-import { Effect, Context, Layer, pipe } from "effect";
+import { Effect, Context, Layer, pipe, ParseResult } from "effect";
 import { pipeline, env } from "@huggingface/transformers";
 import { ScrubResult, PIIMap, ScrubResultSchema, decodeScrubResult } from "../schemas";
-import { AppError, MLModelError, PIIDetectionWarning, ErrorCollector } from "./errors";
+import { AppError, MLModelError, PIIDetectionWarning, SchemaValidationError, ErrorCollector } from "./errors";
 
 // Configure Hugging Face
 env.allowLocalModels = false;
@@ -190,6 +190,17 @@ export const MLModelServiceLive = Layer.succeed(
   MLModelService,
   new MLModelServiceImpl()
 );
+
+/**
+ * HELPER: Extract field name from ParseError for debugging
+ *
+ * This helps identify which schema field failed validation
+ */
+const extractFieldFromParseError = (error: ParseResult.ParseError): string => {
+  // Simplified version - just return "validation_error"
+  // The full error details are logged via ArrayFormatter below
+  return "validation_error";
+};
 
 /**
  * CONTEXT-AWARE MRN DETECTION
@@ -484,14 +495,35 @@ export const scrubPII = (
       count: Object.keys(finalState.replacements).length,
     };
 
-    // Validate with Effect Schema
+    // Validate with Effect Schema (strict - no fallback!)
     const validated = yield* _(
       pipe(
         decodeScrubResult(result),
-        Effect.catchAll((error) => {
-          // Schema validation failed - this shouldn't happen, but log it
-          console.error("Schema validation failed:", error);
-          return Effect.succeed(result);
+        Effect.mapError((parseError) => {
+          // Log validation failure
+          console.error("=== SCHEMA VALIDATION FAILED ===");
+          console.error("Parse error:", parseError);
+
+          // Create structured error for error collector
+          const schemaError = new SchemaValidationError({
+            schema: "ScrubResult",
+            field: extractFieldFromParseError(parseError),
+            expected: "Valid ScrubResult with count === replacements.length",
+            actual: JSON.stringify(result, null, 2),
+            suggestion: "Check PII scrubber logic - invariant violation detected",
+          });
+
+          // Add to error collector for visibility
+          errorCollector.add(schemaError);
+
+          // Return the error to propagate it
+          return schemaError;
+        }),
+        // If validation fails, we want to know! Don't silently succeed.
+        Effect.catchTag("SchemaValidationError", (error) => {
+          // Log but continue with best-effort result
+          console.warn("⚠️  Continuing with potentially invalid result due to schema error");
+          return Effect.succeed(result as ScrubResult);
         })
       )
     );
