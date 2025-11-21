@@ -100,8 +100,8 @@ Output: Patient: [PER_1], DOB: [DATE_1], [ADDR_1], [LOC_1], [ZIP_1]
    EMAIL_LIKE: /\b[a-zA-Z0-9][a-zA-Z0-9._-]*@[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}\b/g
    // Catches variations missed by strict pattern
 
-   PHONE_LIKE: /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g
-   // Catches phone numbers with any separator
+   PHONE_LIKE: /\b\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g
+   // Catches phone numbers with any separator, including (555) format
 
    DATE_LIKE: /\b\d{1,4}[-\/]\d{1,2}[-\/]\d{1,4}\b/g
    // Catches any date-like pattern
