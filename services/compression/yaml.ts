@@ -26,7 +26,7 @@ import {
 import { ErrorCollector, ErrorRecord } from "./errors";
 
 /**
- * YAML string builder (immutable)
+ * YAML string builder (mutable builder pattern)
  */
 class YAMLBuilder {
   private lines: string[] = [];
@@ -321,7 +321,7 @@ export const generateYAML = (
   timeline: CompressedTimeline,
   errorCollector: ErrorCollector
 ): Effect.Effect<string, never, never> => {
-  return Effect.gen(function* (_) {
+  return Effect.sync(() => {
     const builder = new YAMLBuilder();
 
     // Header comment
