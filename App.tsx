@@ -8,7 +8,8 @@ import {
   Github,
   Mail,
   Cpu,
-  Calendar
+  Calendar,
+  Minimize2
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { clsx } from 'clsx';
@@ -19,6 +20,8 @@ import { parseFile } from './services/fileParser';
 import { piiScrubber } from './services/piiScrubber';
 import { formatToMarkdown } from './services/markdownFormatter';
 import { buildMasterTimeline } from './services/timelineOrganizer';
+import { runCompression, defaultCompressionOptions, generateYAMLFromResult } from './services/compression';
+import type { ProcessedDocument } from './services/compression';
 import { db } from './services/db';
 import { ProcessedFile, ProcessingStage } from './types';
 
@@ -28,6 +31,8 @@ const App: React.FC = () => {
   const [modelLoading, setModelLoading] = useState(false);
   const [modelError, setModelError] = useState<string | null>(null);
   const [isGeneratingTimeline, setIsGeneratingTimeline] = useState(false);
+  const [isCompressing, setIsCompressing] = useState(false);
+  const [compressionProgress, setCompressionProgress] = useState<string>('');
 
   useEffect(() => {
     const initModel = async () => {
@@ -210,6 +215,68 @@ const App: React.FC = () => {
     }
   };
 
+  const handleCompressTimeline = async () => {
+    const completedFiles = files.filter(f => f.stage === ProcessingStage.COMPLETED && f.scrubbedText);
+
+    if (completedFiles.length === 0) {
+      alert('No processed files to compress. Please process some documents first.');
+      return;
+    }
+
+    setIsCompressing(true);
+    setCompressionProgress('Preparing documents...');
+
+    try {
+      console.log(`🗜️ Compressing ${completedFiles.length} documents...`);
+
+      // Convert ProcessedFile to ProcessedDocument format
+      const documents: ProcessedDocument[] = completedFiles.map(f => ({
+        id: f.id,
+        filename: f.originalName,
+        text: f.scrubbedText || '',
+        metadata: {
+          documentType: f.type,
+        }
+      }));
+
+      // Run compression with progress callback
+      const result = await runCompression(documents, {
+        ...defaultCompressionOptions,
+        maxOutputSizeKb: 100, // 100KB target
+      }, (progress) => {
+        setCompressionProgress(progress.message);
+      });
+
+      // Generate YAML
+      setCompressionProgress('Generating YAML output...');
+      const yaml = await generateYAMLFromResult(result.timeline, result.errors);
+
+      // Download YAML
+      const blob = new Blob([yaml], { type: 'text/yaml; charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Compressed_Timeline_${new Date().toISOString().split('T')[0]}.yaml`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      console.log('✅ Timeline compressed successfully!');
+      console.log(`📊 Compression: ${result.timeline.compressionMetadata.originalSizeKb.toFixed(2)}KB → ${result.timeline.compressionMetadata.compressedSizeKb.toFixed(2)}KB (${(result.timeline.compressionMetadata.ratio * 100).toFixed(1)}%)`);
+      console.log(`📈 Events: ${result.timeline.compressionMetadata.eventsIncluded}/${result.timeline.compressionMetadata.eventsTotal} included`);
+
+      if (result.errors.hasErrors()) {
+        console.warn(`⚠️ ${result.errors.getAll().length} warnings collected during compression`);
+      }
+
+    } catch (error) {
+      console.error('Error compressing timeline:', error);
+      alert('Failed to compress timeline. Check console for details.');
+    } finally {
+      setIsCompressing(false);
+      setCompressionProgress('');
+    }
+  };
+
   const completedCount = files.filter(f => f.stage === ProcessingStage.COMPLETED).length;
 
   return (
@@ -337,6 +404,30 @@ const App: React.FC = () => {
                   <>
                     <Calendar className="w-4 h-4" />
                     Generate Timeline ({completedCount})
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={handleCompressTimeline}
+                disabled={completedCount === 0 || isCompressing}
+                className={clsx(
+                  "flex items-center gap-2 px-6 py-3 font-bold uppercase tracking-wide border-2 shadow-hard hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all",
+                  completedCount > 0 && !isCompressing
+                    ? "bg-blue-600 text-white border-black"
+                    : "bg-zinc-200 text-zinc-400 border-zinc-300 shadow-none cursor-not-allowed"
+                )}
+                title={compressionProgress || "Compress timeline to YAML (LLM-optimized)"}
+              >
+                {isCompressing ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span className="text-xs">{compressionProgress || 'Compressing...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Minimize2 className="w-4 h-4" />
+                    Compress YAML ({completedCount})
                   </>
                 )}
               </button>
