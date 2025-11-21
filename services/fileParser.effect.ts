@@ -109,7 +109,7 @@ const parsePDFPage = (
 > => {
   return Effect.gen(function* (_) {
     // Get text content
-    const textContent = yield* _(
+    const textContent: any = yield* _(
       Effect.tryPromise({
         try: () => page.getTextContent(),
         catch: (error) =>
@@ -335,7 +335,7 @@ const getMode = (
  */
 const parsePDF = (
   file: File
-): Effect.Effect<ParseResult, PDFParseError | OCRError, never> => {
+): Effect.Effect<ParseResult, PDFParseError | OCRError | FileSystemError, never> => {
   return Effect.gen(function* (_) {
     // Load PDF
     const arrayBuffer = yield* _(
@@ -559,7 +559,7 @@ const convertHtmlToMarkdown = (html: string): string => {
 /**
  * FILE PARSER IMPLEMENTATION
  */
-class FileParserServiceLive implements FileParserService {
+class FileParserServiceImpl implements FileParserService {
   readonly parseFile = (file: File) => {
     return Effect.gen(function* (_) {
       const fileType = file.type;
@@ -627,7 +627,7 @@ class FileParserServiceLive implements FileParserService {
  */
 export const FileParserServiceLive = Layer.succeed(
   FileParserService,
-  new FileParserServiceLive()
+  new FileParserServiceImpl()
 );
 
 /**

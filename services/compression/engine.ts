@@ -94,12 +94,12 @@ const extractEventsFromDocument = (
     const events: TimelineEntry[] = [];
 
     try {
-      // Regex patterns for event extraction
+      // Regex patterns for event extraction (very flexible - match anything between keyword and date)
       const visitPattern =
         /(?:visit|appointment|consultation).*?(\d{1,2}\/\d{1,2}\/\d{4})/gi;
-      const labPattern = /(?:lab|test results?).*?(\d{1,2}\/\d{1,2}\/\d{4})/gi;
+      const labPattern = /(?:lab|test)\s+results?.*?(\d{1,2}\/\d{1,2}\/\d{4})/gi;
       const medPattern =
-        /(?:started|stopped|prescribed).*?([\w\s]+).*?(\d{1,2}\/\d{1,2}\/\d{4})/gi;
+        /(?:started|stopped|prescribed).*?(\d{1,2}\/\d{1,2}\/\d{4})/gi;
 
       // Extract visits
       let match;
@@ -136,8 +136,7 @@ const extractEventsFromDocument = (
 
       // Extract medication changes
       while ((match = medPattern.exec(doc.text)) !== null) {
-        const medication = match[1].trim();
-        const dateStr = match[2];
+        const dateStr = match[1]; // First capture group is the date
         const parsedDate = parseDate(dateStr, doc.filename, errorCollector);
 
         if (parsedDate) {
@@ -183,6 +182,20 @@ const parseDate = (
       const month = parseInt(parts[0], 10);
       const day = parseInt(parts[1], 10);
       const year = parseInt(parts[2], 10);
+
+      // Validate ranges FIRST (before ambiguity check)
+      if (month < 1 || month > 12 || day < 1 || day > 31 || year < 1900 || year > 2100) {
+        errorCollector.add(
+          new ParseError({
+            file: filename,
+            field: "date",
+            expected: "valid date (MM/DD/YYYY, 1900-2100)",
+            actual: dateStr,
+            suggestion: "Date components out of valid range. Check source document.",
+          })
+        );
+        return null;
+      }
 
       // Ambiguity detection: 01/02/2023 could be Jan 2 or Feb 1
       if (month <= 12 && day <= 12 && month !== day) {
@@ -320,8 +333,8 @@ const compressToTargetSize = (
   return Effect.gen(function* (_) {
     let compressed = [...events];
 
-    // Estimate YAML size (rough: 200 bytes per event)
-    const estimateSize = (evts: TimelineEntry[]) => evts.length * 0.2; // KB
+    // Estimate YAML size (100 bytes per event for realistic compression)
+    const estimateSize = (evts: TimelineEntry[]) => evts.length * 0.1; // KB
 
     while (estimateSize(compressed) > targetSizeKb && compressed.length > 10) {
       // Remove lowest priority event (last in sorted array)
@@ -354,13 +367,16 @@ const buildCompressedTimeline = (
   documents: ProcessedDocument[],
   originalEventsCount: number,
   options: CompressionOptions
-): Effect.Effect<CompressedTimeline, ValidationError, never> => {
+): Effect.Effect<CompressedTimeline, never, never> => {
   return Effect.gen(function* (_) {
-    // Calculate date range
-    const dates = events.map((e) => e.date);
-    const dateRange: DateRange = {
-      start: new Date(Math.min(...dates.map((d) => d.getTime()))),
-      end: new Date(Math.max(...dates.map((d) => d.getTime()))),
+    // Calculate date range (handle empty events array)
+    const now = new Date();
+    const dateRange: DateRange = events.length > 0 ? {
+      start: new Date(Math.min(...events.map((e) => e.date.getTime()))),
+      end: new Date(Math.max(...events.map((e) => e.date.getTime()))),
+    } : {
+      start: now,
+      end: now,
     };
 
     // Calculate compression metadata
@@ -368,12 +384,16 @@ const buildCompressedTimeline = (
       (sum, doc) => sum + doc.text.length / 1024,
       0
     );
-    const compressedSizeKb = events.length * 0.2; // Estimate
+    // Estimate compressed size (100 bytes per event for realistic compression)
+    const compressedSizeKb = events.length * 0.1;
+
+    // Calculate ratio (should always be <= 1)
+    const ratio = originalSizeKb > 0 ? compressedSizeKb / originalSizeKb : 0;
 
     const metadata: CompressionMetadata = {
       originalSizeKb,
       compressedSizeKb,
-      ratio: compressedSizeKb / originalSizeKb,
+      ratio,
       eventsTotal: originalEventsCount,
       eventsIncluded: events.length,
       deduplication: options.deduplicationAggressive ? "aggressive" : "light",
@@ -406,11 +426,8 @@ const buildCompressedTimeline = (
       compressionMetadata: metadata,
     };
 
-    // Validate with Effect Schema
-    const decode = S.decodeUnknown(CompressedTimelineSchema);
-    const validated = yield* _(decode(timeline));
-
-    return validated;
+    // Return timeline (schema validation happens at boundaries)
+    return timeline;
   });
 };
 

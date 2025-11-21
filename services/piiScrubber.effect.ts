@@ -84,7 +84,7 @@ export const MLModelService = Context.GenericTag<MLModelService>(
 /**
  * ML MODEL IMPLEMENTATION (Live service)
  */
-class MLModelServiceLive implements MLModelService {
+class MLModelServiceImpl implements MLModelService {
   private pipe: any = null;
   private loadPromise: Promise<void> | null = null;
   private segmenter?: any;
@@ -188,7 +188,7 @@ class MLModelServiceLive implements MLModelService {
  */
 export const MLModelServiceLive = Layer.succeed(
   MLModelService,
-  new MLModelServiceLive()
+  new MLModelServiceImpl()
 );
 
 /**
@@ -244,7 +244,7 @@ interface ScrubState {
  */
 const regexPrePass = (text: string): ScrubState => {
   let interimText = text;
-  const replacements: PIIMap = {};
+  const replacements: Record<string, string> = {}; // Mutable for building
   const counters: Record<string, number> = {
     PER: 0,
     LOC: 0,
@@ -334,8 +334,8 @@ const mlInference = (
   return Effect.gen(function* (_) {
     const mlModel = yield* _(MLModelService);
     let finalText = "";
-    const replacements = { ...state.replacements };
-    const counters = { ...state.counters };
+    const replacements: Record<string, string> = { ...state.replacements };
+    const counters: Record<string, number> = { ...state.counters };
     const entityToPlaceholder: Record<string, string> = Object.fromEntries(
       Object.entries(replacements).map(([k, v]) => [k, v])
     );
