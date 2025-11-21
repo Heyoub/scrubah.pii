@@ -183,15 +183,22 @@ const parseDate = (
       const day = parseInt(parts[1], 10);
       const year = parseInt(parts[2], 10);
 
-      // Validate ranges FIRST (before ambiguity check)
-      if (month < 1 || month > 12 || day < 1 || day > 31 || year < 1900 || year > 2100) {
+      // Validate ranges by attempting to construct a Date object
+      const date = new Date(year, month - 1, day);
+      if (
+        isNaN(date.getTime()) ||
+        date.getFullYear() !== year ||
+        date.getMonth() !== month - 1 ||
+        date.getDate() !== day ||
+        year < 1900 || year > 2100
+      ) {
         errorCollector.add(
           new ParseError({
             file: filename,
             field: "date",
             expected: "valid date (MM/DD/YYYY, 1900-2100)",
             actual: dateStr,
-            suggestion: "Date components out of valid range. Check source document.",
+            suggestion: "Date is invalid (e.g., month/day out of range). Check source document.",
           })
         );
         return null;
