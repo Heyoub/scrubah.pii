@@ -61,18 +61,30 @@ const detectLabeledName = (text: string): { start: number; end: number; value: s
   const matches: { start: number; end: number; value: string }[] = [];
 
   // Look for names with labels (e.g., "Patient Name: John Smith", "Name: Mary Johnson")
-  // Matches: Title + FirstName + LastName (and optional Middle)
+  // Requires explicit colon separator to avoid false positives like "The patient was examined"
+  // Matches: Optional Title + FirstName + LastName (and optional Middle)
+  // Use [ \t] instead of \s to avoid matching across newlines
   const contextPattern = new RegExp(
-    `(${NAME_LABELS.join('|')})[:\\s]+(?:(Dr|Mr|Ms|Mrs|Miss)\\.?\\s+)?([A-Z][a-z]+(?:\\s+[A-Z][a-z]+){1,3})`,
+    `(${NAME_LABELS.join('|')}):[ \\t]+((?:(?:Dr|Mr|Ms|Mrs|Miss)\\.?[ \\t]+)?)([A-Z][a-z]+(?:[ \\t]+[A-Z][a-z]+){1,3})`,
     'gi'
   );
 
   let match;
   while ((match = contextPattern.exec(text)) !== null) {
-    // Extract the full name (including title if present)
-    const nameValue = match[2] ? `${match[2]} ${match[3]}` : match[3];
-    const nameStartOffset = match[0].indexOf(nameValue);
-    const start = match.index + nameStartOffset;
+    // match[1] = label (e.g., "Patient Name")
+    // match[2] = title with period and space if present (e.g., "Dr. " or "")
+    // match[3] = name parts (e.g., "Jane Smith")
+
+    // Extract the full name including title if present
+    const titlePart = match[2];  // This includes period if present and trailing space
+    const namePart = match[3];
+    const fullName = titlePart + namePart;
+    const nameValue = fullName.trim();
+
+    // Find where the actual name value starts in the match (after the colon and space)
+    const labelAndColon = match[1] + ':';
+    const nameStartInMatch = match[0].indexOf(titlePart + namePart, labelAndColon.length);
+    const start = match.index + nameStartInMatch;
 
     matches.push({
       start,
@@ -305,10 +317,11 @@ class PiiScrubberService {
         });
     };
 
+    // Apply patterns in order of specificity (more specific first to avoid false matches)
     runRegex('EMAIL', PATTERNS.EMAIL, 'EMAIL');
-    runRegex('PHONE', PATTERNS.PHONE, 'PHONE');
+    runRegex('ID', PATTERNS.CREDIT_CARD, 'CARD');  // 16 digits - more specific than phone
+    runRegex('PHONE', PATTERNS.PHONE, 'PHONE');     // 10 digits
     runRegex('ID', PATTERNS.SSN, 'SSN');
-    runRegex('ID', PATTERNS.CREDIT_CARD, 'CARD');
     runRegex('ID', PATTERNS.ZIPCODE, 'ZIP');
     runRegex('DATE', PATTERNS.DATE, 'DATE');
 

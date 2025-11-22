@@ -97,9 +97,9 @@ const extractEventsFromDocument = (
       // Regex patterns for event extraction (very flexible - match anything between keyword and date)
       const visitPattern =
         /(?:visit|appointment|consultation).*?(\d{1,2}\/\d{1,2}\/\d{4})/gi;
-      const labPattern = /(?:lab|test)\s+results?.*?(\d{1,2}\/\d{1,2}\/\d{4})/gi;
+      const labPattern = /(?:lab|test).*?(\d{1,2}\/\d{1,2}\/\d{4})/gi;
       const medPattern =
-        /(?:started|stopped|prescribed).*?(\d{1,2}\/\d{1,2}\/\d{4})/gi;
+        /(?:started|stopped|prescribed|medication|meds?).*?(\d{1,2}\/\d{1,2}\/\d{4})/gi;
 
       // Extract visits
       let match;
