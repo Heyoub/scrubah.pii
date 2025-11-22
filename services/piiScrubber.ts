@@ -15,7 +15,9 @@ const PATTERNS = {
   DATE: /\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b/g,
   // Context-aware MRN detection
   CREDIT_CARD: /\b(?:\d{4}[-\s]?){3}\d{4}\b/g,
-  ZIPCODE: /\b\d{5}(?:-\d{4})?\b/g
+  ZIPCODE: /\b\d{5}(?:-\d{4})?\b/g,
+  // Medical document header names (LASTNAME, FIRSTNAME format)
+  PATIENT_NAME: /^([A-Z]{2,}),\s+([A-Z]{2,})$/gm
 };
 
 // Context-aware MRN detector
@@ -120,6 +122,7 @@ class PiiScrubberService {
         });
     };
 
+    runRegex('PER', PATTERNS.PATIENT_NAME, 'NAME');
     runRegex('EMAIL', PATTERNS.EMAIL, 'EMAIL');
     runRegex('PHONE', PATTERNS.PHONE, 'PHONE');
     runRegex('ID', PATTERNS.SSN, 'SSN');
@@ -180,9 +183,9 @@ class PiiScrubberService {
       let chunkCursor = 0;
       let scrubbedChunk = '';
       
-      // Filter high confidence entities
+      // Filter entities - use LOWER threshold for medical PII (err on side of caution)
       // @ts-ignore
-      const entities = output.filter(e => TARGET_ENTITIES.includes(e.entity_group) && e.score > 0.80);
+      const entities = output.filter(e => TARGET_ENTITIES.includes(e.entity_group) && e.score > 0.50);
       
       // Sort by start index to process sequentially
       // @ts-ignore
