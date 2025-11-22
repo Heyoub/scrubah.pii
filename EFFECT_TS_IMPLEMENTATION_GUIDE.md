@@ -7,7 +7,9 @@ This guide provides complete implementation details for adding Effect Cause trac
 ## Task 2: Effect Cause Tracking with Spans
 
 ### Overview
+
 Effect spans provide execution tracing similar to OpenTelemetry. They track:
+
 - Which operations executed
 - How long they took
 - What errors occurred
@@ -346,11 +348,12 @@ npm run test:mutation:watch
 ### Step 2: Analyze Results
 
 Stryker will generate:
+
 1. **HTML Report**: `reports/mutation/mutation-report.html`
 2. **JSON Report**: `reports/mutation/mutation-report.json`
 3. **Console Output**: Shows mutation score and survived mutants
 
-#### Example Output:
+#### Example Output
 
 ```
 #-------------------------------|---------|----------|-----------|------------|----------|---------|
@@ -385,6 +388,7 @@ All files                       |   76.32 |      145 |         0 |         45 | 
 ```
 
 **Analysis:**
+
 - **Line 318**: `if (score >= 60) return "keep";`
 - **Mutation**: Changed to `if (true) return "keep";`
 - **Status**: SURVIVED (tests didn't catch this!)
@@ -426,6 +430,7 @@ export const RelevanceScoreSchema = S.Struct({
 ```
 
 **Now when you run Stryker again:**
+
 - Mutation `if (true) return "keep"` will be KILLED ✅
 - Because the schema will reject invalid recommendation for low scores
 - Tests will fail when schema validation fails
@@ -518,16 +523,19 @@ npx ts-node scripts/analyze-mutations.ts
 ## Summary
 
 ### Task 2: Effect Cause Tracking ✅
+
 - Added `Effect.withSpan()` annotations
 - Tracks execution flow with attributes
 - Provides detailed error traces
 
 ### Task 3: Stryker Setup ✅
+
 - Installed mutation testing packages
 - Configured stryker.config.json
 - Added npm scripts
 
 ### Task 4: Mutation Analysis ✅
+
 - Run Stryker to find weak tests
 - Identify survived mutants (bugs that tests miss)
 - Fix with schema invariants
@@ -536,11 +544,13 @@ npx ts-node scripts/analyze-mutations.ts
 ### Expected Results
 
 **Before:**
+
 - Tests might pass but miss edge cases
 - Business rules not enforced at type level
 - No execution tracing
 
 **After:**
+
 - Mutation score >80% (strong tests)
 - Schema invariants enforce business rules
 - Full execution traces for debugging
