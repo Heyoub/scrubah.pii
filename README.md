@@ -1,6 +1,6 @@
-# Scrubah.PII - Forensic Medical Data Sanitizer
+# SCRUBAH.PII - Forensic Medical Data Sanitizer
 
-<div align="center">
+[<div align="center">]
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/)
@@ -8,7 +8,7 @@
 [![Vite](https://img.shields.io/badge/Vite-7.2-purple)](https://vitejs.dev/)
 [![Live Demo](https://img.shields.io/badge/🌐_Live_Demo-scrubah--pii.heyoub.dev-brightgreen)](https://scrubah-pii.heyoub.dev)
 
-**Zero-Trust PII Scrubbing + Temporal Medical Record Compilation**
+|**Zero-Trust PII Scrubbing + Temporal Medical Record Compilation**
 
 Sanitize medical documents locally in your browser. Generate LLM-optimized timelines with content-based deduplication, structured lab extraction, and chronological organization.
 
@@ -69,7 +69,7 @@ Scrubah.PII transforms messy medical records into clean, LLM-ready datasets:
 
 ## 🏗️ Architecture
 
-```
+```mermaid
 ┌─────────────────────────────────────────────────────┐
 │                   Browser (Client)                   │
 ├─────────────────────────────────────────────────────┤
@@ -127,7 +127,7 @@ Open <http://localhost:3501/> (or check console for port)
 
 ### Timeline Generation
 
-```
+```mermaid
 Upload 142 medical PDFs
   ↓
 Wait for green checkmarks (all processed)
@@ -389,7 +389,7 @@ Built by [@Heyoub](https://github.com/Heyoub) for [@forgestack](https://forgesta
 
 <div align="center">
 
-**Built with 🧠 for optimal LLM consumption**
+|**Built with 🧠 for optimal LLM consumption**
 
 © 2024 Forgestack.app
 
