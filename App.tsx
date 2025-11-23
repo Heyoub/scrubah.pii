@@ -14,34 +14,18 @@ import { clsx } from 'clsx';
 
 import { DropZone } from './components/DropZone';
 import { StatusBoard } from './components/StatusBoard';
-import { parseFile } from './services/fileParser';
-import { piiScrubber } from './services/piiScrubber';
+import { runParseFile } from './services/fileParser.effect';
+import { runScrubPII } from './services/piiScrubber.effect';
 import { formatToMarkdown } from './services/markdownFormatter';
 import { db } from './services/db';
-import { ProcessedFile, ProcessingStage } from './types';
+import { ProcessedFile, ProcessingStage } from './schemas';
 
 const App: React.FC = () => {
   const [files, setFiles] = useState<ProcessedFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [modelLoading, setModelLoading] = useState(false);
-  const [modelError, setModelError] = useState<string | null>(null);
 
   useEffect(() => {
-    const initModel = async () => {
-      setModelLoading(true);
-      setModelError(null);
-      try {
-        await piiScrubber.loadModel();
-      } catch (e) {
-        const errorMsg = e instanceof Error ? e.message : 'Unknown error loading ML model';
-        console.error("Model failed to load", e);
-        setModelError(errorMsg);
-      } finally {
-        setModelLoading(false);
-      }
-    };
-    initModel();
-    
+    // Load saved files from IndexedDB
     db.files.toArray().then(savedFiles => {
       if (savedFiles.length > 0) {
         setFiles(savedFiles);
@@ -50,9 +34,7 @@ const App: React.FC = () => {
   }, []);
 
   const handleFilesDropped = useCallback(async (droppedFiles: File[]) => {
-    if (!modelLoading) {
-        piiScrubber.loadModel().catch(console.error);
-    }
+    // Effect-TS handles model loading automatically
 
     const newFiles: ProcessedFile[] = droppedFiles.map(f => ({
       id: crypto.randomUUID(),
@@ -64,7 +46,7 @@ const App: React.FC = () => {
 
     setFiles(prev => [...prev, ...newFiles]);
     processQueue(droppedFiles, newFiles);
-  }, [modelLoading]);
+  }, []);
 
   const processQueue = async (rawFiles: File[], fileEntries: ProcessedFile[]) => {
     setIsProcessing(true);
@@ -77,11 +59,11 @@ const App: React.FC = () => {
       try {
         // 1. Parsing Stage
         updateFileStatus(fileEntry.id, ProcessingStage.PARSING);
-        const rawText = await parseFile(rawFile);
+        const rawText = await runParseFile(rawFile);
 
         // 2. Scrubbing Stage
         updateFileStatus(fileEntry.id, ProcessingStage.SCRUBBING, { rawText });
-        const scrubResult = await piiScrubber.scrub(rawText);
+        const scrubResult = await runScrubPII(rawText);
 
         // 3. Formatting Stage
         updateFileStatus(fileEntry.id, ProcessingStage.FORMATTING);
@@ -122,19 +104,6 @@ const App: React.FC = () => {
     setFiles(prev => prev.map(f => f.id === id ? fullFile : f));
   };
 
-  const handleRetryModelLoad = async () => {
-    setModelLoading(true);
-    setModelError(null);
-    try {
-      await piiScrubber.loadModel();
-    } catch (e) {
-      const errorMsg = e instanceof Error ? e.message : 'Unknown error loading ML model';
-      console.error("Model failed to load", e);
-      setModelError(errorMsg);
-    } finally {
-      setModelLoading(false);
-    }
-  };
 
   const handleClearAll = async () => {
     if (window.confirm("PURGE MEMORY?\nThis will permanently delete all processed files from this session.")) {
@@ -196,22 +165,8 @@ const App: React.FC = () => {
              <div className="hidden md:flex flex-col text-right">
                 <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase">Status</span>
                 <div className="flex items-center gap-2">
-                    {modelLoading ? (
-                        <>
-                            <RefreshCw className="w-3 h-3 animate-spin text-accent-600" />
-                            <span className="text-xs font-bold">LOADING_MODEL...</span>
-                        </>
-                    ) : modelError ? (
-                        <>
-                             <span className="w-2 h-2 bg-rose-500 rounded-full animate-pulse"></span>
-                             <span className="text-xs font-bold text-rose-600">MODEL_ERROR</span>
-                        </>
-                    ) : (
-                        <>
-                             <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
-                             <span className="text-xs font-bold">SYSTEM_READY</span>
-                        </>
-                    )}
+                  <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
+                  <span className="text-xs font-bold">SYSTEM_READY</span>
                 </div>
              </div>
              
@@ -236,34 +191,6 @@ const App: React.FC = () => {
             Format for LLMs without leaking secrets.
           </p>
         </div>
-
-        {/* Error Banner */}
-        {modelError && (
-          <div className="bg-rose-50 border-2 border-rose-600 p-6 mb-8 animate-in fade-in slide-in-from-top-2 duration-300">
-            <div className="flex items-start gap-3">
-              <ShieldAlert className="w-6 h-6 text-rose-600 shrink-0 mt-1" />
-              <div className="flex-1">
-                <h3 className="text-lg font-bold text-rose-900 mb-1 uppercase tracking-tight">
-                  ML Model Failed to Load
-                </h3>
-                <p className="text-sm font-mono text-rose-800 mb-3">
-                  {modelError}
-                </p>
-                <p className="text-xs text-rose-700 mb-3">
-                  The app will still work with regex-based PII detection, but ML-powered entity recognition (names, locations, organizations) will be unavailable.
-                </p>
-                <button
-                  onClick={handleRetryModelLoad}
-                  disabled={modelLoading}
-                  className="flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase bg-rose-600 text-white border-2 border-rose-800 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                >
-                  <RefreshCw className={clsx("w-4 h-4", modelLoading && "animate-spin")} />
-                  Retry Model Load
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Action Area */}
         <DropZone onFilesDropped={handleFilesDropped} isProcessing={isProcessing} />
