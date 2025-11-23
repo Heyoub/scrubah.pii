@@ -18,7 +18,7 @@ import { runParseFile } from './services/fileParser.effect';
 import { runScrubPII } from './services/piiScrubber.effect';
 import { formatToMarkdown } from './services/markdownFormatter';
 import { db } from './services/db';
-import { ProcessedFile, ProcessingStage } from './schemas';
+import type { ProcessedFile, ProcessingStage } from './schemas';
 
 const App: React.FC = () => {
   const [files, setFiles] = useState<ProcessedFile[]>([]);
@@ -41,7 +41,7 @@ const App: React.FC = () => {
       originalName: f.name,
       size: f.size,
       type: f.type,
-      stage: ProcessingStage.QUEUED
+      stage: "QUEUED" as const
     }));
 
     setFiles(prev => [...prev, ...newFiles]);
@@ -58,15 +58,15 @@ const App: React.FC = () => {
 
       try {
         // 1. Parsing Stage
-        updateFileStatus(fileEntry.id, ProcessingStage.PARSING);
+        updateFileStatus(fileEntry.id, "PARSING");
         const rawText = await runParseFile(rawFile);
 
         // 2. Scrubbing Stage
-        updateFileStatus(fileEntry.id, ProcessingStage.SCRUBBING, { rawText });
+        updateFileStatus(fileEntry.id, "SCRUBBING", { rawText });
         const scrubResult = await runScrubPII(rawText);
 
         // 3. Formatting Stage
-        updateFileStatus(fileEntry.id, ProcessingStage.FORMATTING);
+        updateFileStatus(fileEntry.id, "FORMATTING");
         
         const processingTimeMs = performance.now() - startTime;
         const markdown = formatToMarkdown(fileEntry, scrubResult, processingTimeMs);
@@ -78,7 +78,7 @@ const App: React.FC = () => {
 
         const completedFile = {
           ...fileEntry,
-          stage: ProcessingStage.COMPLETED,
+          stage: "COMPLETED",
           scrubbedText: scrubResult.text,
           markdown,
           stats
@@ -89,7 +89,7 @@ const App: React.FC = () => {
 
       } catch (error: any) {
         console.error(`Error processing ${fileEntry.originalName}`, error);
-        updateFileStatus(fileEntry.id, ProcessingStage.ERROR, { error: error.message });
+        updateFileStatus(fileEntry.id, "ERROR", { error: error.message });
       }
     }
 
@@ -125,7 +125,7 @@ const App: React.FC = () => {
 
   const handleDownloadZip = async () => {
     const zip = new JSZip();
-    const processed = files.filter(f => f.stage === ProcessingStage.COMPLETED && f.markdown);
+    const processed = files.filter(f => f.stage === "COMPLETED" && f.markdown);
     
     if (processed.length === 0) return;
 
@@ -142,7 +142,7 @@ const App: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  const completedCount = files.filter(f => f.stage === ProcessingStage.COMPLETED).length;
+  const completedCount = files.filter(f => f.stage === "COMPLETED").length;
 
   return (
     <div className="min-h-screen bg-[#f0f0f0] font-sans text-zinc-900 pb-20 selection:bg-black selection:text-white">
