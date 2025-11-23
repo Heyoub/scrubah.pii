@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { ProcessedFile, ProcessingStage } from '../types';
+import { ProcessedFile, ProcessingStage } from '../schemas';
 import {
   Loader2,
   CheckSquare,
