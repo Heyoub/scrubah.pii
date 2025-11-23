@@ -44,7 +44,7 @@ const App: React.FC = () => {
       originalName: f.name,
       size: f.size,
       type: f.type,
-      stage: "QUEUED" as const
+      stage: "QUEUED"
     }));
 
     setFiles(prev => [...prev, ...newFiles]);
@@ -79,7 +79,7 @@ const App: React.FC = () => {
           processingTimeMs
         };
 
-        const completedFile = {
+        const completedFile: ProcessedFile = {
           ...fileEntry,
           stage: "COMPLETED",
           scrubbedText: scrubResult.text,
