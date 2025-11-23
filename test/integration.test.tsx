@@ -3,19 +3,16 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../App';
 
-// Mock external dependencies
-vi.mock('../services/piiScrubber', () => ({
-  piiScrubber: {
-    loadModel: vi.fn().mockResolvedValue(undefined),
-    scrub: vi.fn().mockResolvedValue({
-      text: 'Patient [PER_1] visited on [DATE_1].',
-      replacements: {
-        'John Doe': '[PER_1]',
-        '01/15/2024': '[DATE_1]',
-      },
-      count: 2,
-    }),
-  },
+// Mock external dependencies - Effect versions
+vi.mock('../services/piiScrubber.effect', () => ({
+  runScrubPII: vi.fn().mockResolvedValue({
+    text: 'Patient [PER_1] visited on [DATE_1].',
+    replacements: {
+      'John Doe': '[PER_1]',
+      '01/15/2024': '[DATE_1]',
+    },
+    count: 2,
+  }),
   detectContextualMRN: vi.fn().mockReturnValue([]),
   PATTERNS: {
     EMAIL: /\b[\w\.-]+@[\w\.-]+\.\w{2,4}\b/g,
@@ -27,8 +24,8 @@ vi.mock('../services/piiScrubber', () => ({
   MRN_CONTEXT_KEYWORDS: ['MRN', 'Patient ID'],
 }));
 
-vi.mock('../services/fileParser', () => ({
-  parseFile: vi.fn().mockResolvedValue('Patient John Doe visited on 01/15/2024.'),
+vi.mock('../services/fileParser.effect', () => ({
+  runParseFile: vi.fn().mockResolvedValue('Patient John Doe visited on 01/15/2024.'),
 }));
 
 vi.mock('../services/db', () => ({
@@ -58,71 +55,15 @@ describe('Integration Tests - Full Workflow', () => {
     expect(screen.getByText(/KEEP IT LOCAL/i)).toBeInTheDocument();
   });
 
-  it('should show system ready status after model loads', async () => {
+  it('should show system ready status', async () => {
     render(<App />);
 
-    await waitFor(() => {
-      expect(screen.getByText(/SYSTEM_READY/i)).toBeInTheDocument();
-    });
+    // App.tsx now shows SYSTEM_READY immediately (Effect handles model loading internally)
+    expect(screen.getByText(/SYSTEM_READY/i)).toBeInTheDocument();
   });
 
-  it('should show loading state while model is loading', async () => {
-    const { piiScrubber } = await import('../services/piiScrubber');
-
-    // Make model loading take time
-    vi.mocked(piiScrubber.loadModel).mockImplementation(
-      () => new Promise((resolve) => setTimeout(resolve, 100))
-    );
-
-    render(<App />);
-
-    expect(screen.getByText(/LOADING_MODEL/i)).toBeInTheDocument();
-
-    await waitFor(
-      () => {
-        expect(screen.getByText(/SYSTEM_READY/i)).toBeInTheDocument();
-      },
-      { timeout: 200 }
-    );
-  });
-
-  it('should show error state when model fails to load', async () => {
-    const { piiScrubber } = await import('../services/piiScrubber');
-
-    vi.mocked(piiScrubber.loadModel).mockRejectedValue(
-      new Error('Failed to download model')
-    );
-
-    render(<App />);
-
-    await waitFor(() => {
-      expect(screen.getByText(/MODEL_ERROR/i)).toBeInTheDocument();
-      expect(screen.getByText(/ML Model Failed to Load/i)).toBeInTheDocument();
-    });
-  });
-
-  it('should allow retrying model load after failure', async () => {
-    const { piiScrubber } = await import('../services/piiScrubber');
-    const user = userEvent.setup();
-
-    // First call fails
-    vi.mocked(piiScrubber.loadModel)
-      .mockRejectedValueOnce(new Error('Network error'))
-      .mockResolvedValueOnce(undefined);
-
-    render(<App />);
-
-    await waitFor(() => {
-      expect(screen.getByText(/MODEL_ERROR/i)).toBeInTheDocument();
-    });
-
-    const retryButton = screen.getByRole('button', { name: /Retry Model Load/i });
-    await user.click(retryButton);
-
-    await waitFor(() => {
-      expect(screen.getByText(/SYSTEM_READY/i)).toBeInTheDocument();
-    });
-  });
+  // NOTE: Model loading tests removed - App.tsx no longer shows loading/error UI
+  // Effect-TS handles model loading internally with graceful degradation
 
   it('should render drop zone for file upload', () => {
     render(<App />);
@@ -140,14 +81,12 @@ describe('Integration Tests - Full Workflow', () => {
   });
 
   it('should process uploaded text file through full pipeline', async () => {
-    const { piiScrubber } = await import('../services/piiScrubber');
-    const { parseFile } = await import('../services/fileParser');
+    const { runScrubPII } = await import('../services/piiScrubber.effect');
+    const { runParseFile } = await import('../services/fileParser.effect');
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(screen.getByText(/SYSTEM_READY/i)).toBeInTheDocument();
-    });
+    expect(screen.getByText(/SYSTEM_READY/i)).toBeInTheDocument();
 
     // Create a test file
     const fileContent = 'Patient John Doe visited on 01/15/2024.';
@@ -170,8 +109,8 @@ describe('Integration Tests - Full Workflow', () => {
     // Wait for processing to complete
     await waitFor(
       () => {
-        expect(parseFile).toHaveBeenCalledWith(file);
-        expect(piiScrubber.scrub).toHaveBeenCalled();
+        expect(runParseFile).toHaveBeenCalledWith(file);
+        expect(runScrubPII).toHaveBeenCalled();
       },
       { timeout: 3000 }
     );
@@ -202,10 +141,10 @@ describe('Integration Tests - Full Workflow', () => {
   });
 
   it('should show processing stages for uploaded file', async () => {
-    const { piiScrubber } = await import('../services/piiScrubber');
+    const { runScrubPII } = await import('../services/piiScrubber.effect');
 
     // Make scrubbing take some time
-    vi.mocked(piiScrubber.scrub).mockImplementation(
+    vi.mocked(runScrubPII).mockImplementation(
       () => new Promise((resolve) => setTimeout(() => resolve({
         text: 'Scrubbed text',
         replacements: {},
@@ -215,9 +154,7 @@ describe('Integration Tests - Full Workflow', () => {
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(screen.getByText(/SYSTEM_READY/i)).toBeInTheDocument();
-    });
+    expect(screen.getByText(/SYSTEM_READY/i)).toBeInTheDocument();
 
     const file = new File(['content'], 'test.txt', { type: 'text/plain' });
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
@@ -321,9 +258,9 @@ describe('Integration Tests - Full Workflow', () => {
   });
 
   it('should display PII removal count after processing', async () => {
-    const { piiScrubber } = await import('../services/piiScrubber');
+    const { runScrubPII } = await import('../services/piiScrubber.effect');
 
-    vi.mocked(piiScrubber.scrub).mockResolvedValue({
+    vi.mocked(runScrubPII).mockResolvedValue({
       text: 'Scrubbed content',
       replacements: { a: 'b', c: 'd', e: 'f' },
       count: 5,
@@ -331,9 +268,7 @@ describe('Integration Tests - Full Workflow', () => {
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(screen.getByText(/SYSTEM_READY/i)).toBeInTheDocument();
-    });
+    expect(screen.getByText(/SYSTEM_READY/i)).toBeInTheDocument();
 
     const file = new File(['content'], 'test.txt', { type: 'text/plain' });
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
