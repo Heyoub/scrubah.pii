@@ -12,7 +12,7 @@ import {
   DocumentType
 } from './contentHasher';
 import { extractLabResults, formatLabTable, generateTrendAnalysis, LabPanel } from './labExtractor';
-import { ProcessedFile } from '../types';
+import { ProcessedFile } from '../schemas';
 
 export interface TimelineDocument {
   id: string;

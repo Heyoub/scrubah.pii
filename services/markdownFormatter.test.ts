@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { formatToMarkdown } from './markdownFormatter';
-import { ProcessedFile, ProcessingStage, ScrubResult } from '../types';
+import { ProcessedFile, ProcessingStage, ScrubResult } from '../schemas';
 
 describe('Markdown Formatter', () => {
   let mockFile: ProcessedFile;
