@@ -1,13 +1,14 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  Download, 
-  RefreshCw, 
-  ShieldAlert, 
-  Trash2, 
+import {
+  Download,
+  RefreshCw,
+  ShieldAlert,
+  Trash2,
   Github,
   Mail,
-  Cpu
+  Cpu,
+  Calendar
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { clsx } from 'clsx';
@@ -17,12 +18,14 @@ import { StatusBoard } from './components/StatusBoard';
 import { runParseFile } from './services/fileParser.effect';
 import { runScrubPII } from './services/piiScrubber.effect';
 import { formatToMarkdown } from './services/markdownFormatter';
+import { buildMasterTimeline } from './services/timelineOrganizer';
 import { db } from './services/db';
 import type { ProcessedFile, ProcessingStage } from './schemas';
 
 const App: React.FC = () => {
   const [files, setFiles] = useState<ProcessedFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isGeneratingTimeline, setIsGeneratingTimeline] = useState(false);
 
   useEffect(() => {
     // Load saved files from IndexedDB
@@ -126,7 +129,7 @@ const App: React.FC = () => {
   const handleDownloadZip = async () => {
     const zip = new JSZip();
     const processed = files.filter(f => f.stage === "COMPLETED" && f.markdown);
-    
+
     if (processed.length === 0) return;
 
     processed.forEach(f => {
@@ -140,6 +143,38 @@ const App: React.FC = () => {
     a.download = `Scrubah_Export_${new Date().toISOString().split('T')[0]}.zip`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleGenerateTimeline = async () => {
+    const completedFiles = files.filter(f => f.stage === "COMPLETED" && f.scrubbedText);
+
+    if (completedFiles.length === 0) {
+      alert('No processed files to compile. Please process some documents first.');
+      return;
+    }
+
+    setIsGeneratingTimeline(true);
+
+    try {
+      console.log(`📊 Generating master timeline from ${completedFiles.length} documents...`);
+      const timeline = await buildMasterTimeline(completedFiles);
+
+      const blob = new Blob([timeline.markdown], { type: 'text/markdown; charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Medical_Timeline_${new Date().toISOString().split('T')[0]}.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      console.log('✅ Master timeline generated successfully!');
+      console.log(`📈 Stats: ${timeline.summary.totalDocuments} total, ${timeline.summary.uniqueDocuments} unique, ${timeline.summary.duplicates} duplicates`);
+    } catch (error) {
+      console.error('Error generating timeline:', error);
+      alert('Failed to generate timeline. Check console for details.');
+    } finally {
+      setIsGeneratingTimeline(false);
+    }
   };
 
   const completedCount = files.filter(f => f.stage === "COMPLETED").length;
@@ -212,13 +247,36 @@ const App: React.FC = () => {
               disabled={completedCount === 0}
               className={clsx(
                 "flex items-center gap-2 px-6 py-3 font-bold uppercase tracking-wide border-2 border-black shadow-hard hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all",
-                completedCount > 0 
-                  ? "bg-accent-600 text-white border-black" 
+                completedCount > 0
+                  ? "bg-accent-600 text-white border-black"
                   : "bg-zinc-200 text-zinc-400 border-zinc-300 shadow-none cursor-not-allowed"
               )}
             >
               <Download className="w-4 h-4" />
               Download Bundle ({completedCount})
+            </button>
+
+            <button
+              onClick={handleGenerateTimeline}
+              disabled={completedCount === 0 || isGeneratingTimeline}
+              className={clsx(
+                "flex items-center gap-2 px-6 py-3 font-bold uppercase tracking-wide border-2 shadow-hard hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all",
+                completedCount > 0 && !isGeneratingTimeline
+                  ? "bg-emerald-600 text-white border-black"
+                  : "bg-zinc-200 text-zinc-400 border-zinc-300 shadow-none cursor-not-allowed"
+              )}
+            >
+              {isGeneratingTimeline ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  Compiling...
+                </>
+              ) : (
+                <>
+                  <Calendar className="w-4 h-4" />
+                  Generate Timeline ({completedCount})
+                </>
+              )}
             </button>
           </div>
         )}
