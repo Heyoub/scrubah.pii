@@ -20,7 +20,7 @@ vi.mock('tesseract.js', () => ({
 }));
 
 // Helper to get mock function (vi.mocked not available in Bun)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 const asMock = (fn: any): Mock => fn as Mock;
 
 describe('File Parser - Text Files', () => {

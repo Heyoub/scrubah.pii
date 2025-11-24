@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { detectContextualMRN, detectLabeledName, PATTERNS, MRN_CONTEXT_KEYWORDS, NAME_LABELS } from './piiScrubber';
 
 describe('PII Scrubber - Regex Patterns', () => {

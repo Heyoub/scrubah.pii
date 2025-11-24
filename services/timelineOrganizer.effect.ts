@@ -14,10 +14,10 @@
  * - Immutable timeline documents
  */
 
-import { Effect, pipe } from "effect";
-import { parse, format, isValid } from "date-fns";
+import { Effect } from "effect";
+import { parse, isValid } from "date-fns";
 import { ProcessedFile } from "../schemas";
-import { AppError, MissingDateError, TimelineConflictError, ErrorCollector } from "./errors";
+import { MissingDateError, TimelineConflictError, ErrorCollector } from "./errors";
 import {
   DocumentFingerprint,
   DuplicateAnalysis,
@@ -131,7 +131,7 @@ export const extractPrimaryDate = (
           if (isValid(parsedDate)) {
             return parsedDate;
           }
-        } catch (e) {
+        } catch {
           continue;
         }
       }
@@ -157,7 +157,7 @@ export const extractPrimaryDate = (
           if (isValid(parsedDate)) {
             return parsedDate;
           }
-        } catch (e) {
+        } catch {
           continue;
         }
       }
