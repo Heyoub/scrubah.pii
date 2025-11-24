@@ -159,7 +159,7 @@ const App: React.FC = () => {
       console.log(`📊 Generating master timeline from ${completedFiles.length} documents...`);
       const result = await runBuildMasterTimeline(completedFiles);
 
-      const blob = new Blob([result.timeline.markdown], { type: 'text/markdown; charset=utf-8' });
+      const blob = new Blob([result.markdown], { type: 'text/markdown; charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -168,7 +168,7 @@ const App: React.FC = () => {
       URL.revokeObjectURL(url);
 
       console.log('✅ Master timeline generated successfully!');
-      console.log(`📈 Stats: ${result.timeline.summary.totalDocuments} total, ${result.timeline.summary.uniqueDocuments} unique, ${result.timeline.summary.duplicates} duplicates`);
+      console.log(`📈 Stats: ${result.summary.totalDocuments} total, ${result.summary.uniqueDocuments} unique, ${result.summary.duplicates} duplicates`);
     } catch (error) {
       console.error('Error generating timeline:', error);
       alert('Failed to generate timeline. Check console for details.');
