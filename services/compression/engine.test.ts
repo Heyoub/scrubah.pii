@@ -1,10 +1,8 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { Effect } from 'effect';
+import { describe, it, expect } from 'vitest';
 import {
   runCompression,
   ProcessedDocument,
   defaultCompressionOptions,
-  CompressionOptions,
 } from './index';
 
 describe('Compression Engine', () => {

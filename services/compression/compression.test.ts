@@ -1,11 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { Effect, Schema as S } from "effect";
+import { Effect } from "effect";
 import {
   runCompression,
   ProcessedDocument,
   defaultCompressionOptions,
-  CompressedTimelineSchema,
-  CompressionOptions,
   generateYAMLFromResult,
 } from "./index";
 

@@ -1,4 +1,4 @@
-import { expect, afterEach, vi } from 'vitest';
+import { afterEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
@@ -22,7 +22,7 @@ afterEach(() => {
 if (typeof Intl.Segmenter === 'undefined') {
   // @ts-ignore
   global.Intl.Segmenter = class Segmenter {
-    constructor(locale: string, options: any) {}
+    constructor(_locale: string, _options: unknown) {}
     segment(text: string) {
       // Simple fallback: split by sentence-ending punctuation
       const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];

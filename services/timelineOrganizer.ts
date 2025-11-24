@@ -3,7 +3,7 @@
  * Optimized for LLM pathological analysis
  */
 
-import { parse, format, isValid } from 'date-fns';
+import { parse, isValid } from 'date-fns';
 import {
   DocumentFingerprint,
   DuplicateAnalysis,
@@ -74,7 +74,7 @@ export const extractPrimaryDate = (filename: string, content: string): Date => {
           if (isValid(parsedDate)) {
             return parsedDate;
           }
-        } catch (e) {
+        } catch {
           // Try next format
           continue;
         }
@@ -101,7 +101,7 @@ export const extractPrimaryDate = (filename: string, content: string): Date => {
           if (isValid(parsedDate)) {
             return parsedDate;
           }
-        } catch (e) {
+        } catch {
           continue;
         }
       }
