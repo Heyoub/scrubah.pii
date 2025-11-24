@@ -1,4 +1,4 @@
-import { ProcessedFile, ScrubResult } from '../schemas';
+import { ProcessedFile, ScrubResult } from '../types';
 
 interface FrontmatterMetadata {
   source_file: string;

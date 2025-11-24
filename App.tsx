@@ -18,7 +18,7 @@ import { StatusBoard } from './components/StatusBoard';
 import { runParseFile } from './services/fileParser.effect';
 import { runScrubPII } from './services/piiScrubber.effect';
 import { formatToMarkdown } from './services/markdownFormatter';
-import { buildMasterTimeline } from './services/timelineOrganizer';
+import { runBuildMasterTimeline } from './services/timelineOrganizer.effect';
 import { db } from './services/db';
 import type { ProcessedFile, ProcessingStage } from './schemas';
 
@@ -157,9 +157,9 @@ const App: React.FC = () => {
 
     try {
       console.log(`📊 Generating master timeline from ${completedFiles.length} documents...`);
-      const timeline = await buildMasterTimeline(completedFiles);
+      const result = await runBuildMasterTimeline(completedFiles);
 
-      const blob = new Blob([timeline.markdown], { type: 'text/markdown; charset=utf-8' });
+      const blob = new Blob([result.timeline.markdown], { type: 'text/markdown; charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -168,7 +168,7 @@ const App: React.FC = () => {
       URL.revokeObjectURL(url);
 
       console.log('✅ Master timeline generated successfully!');
-      console.log(`📈 Stats: ${timeline.summary.totalDocuments} total, ${timeline.summary.uniqueDocuments} unique, ${timeline.summary.duplicates} duplicates`);
+      console.log(`📈 Stats: ${result.timeline.summary.totalDocuments} total, ${result.timeline.summary.uniqueDocuments} unique, ${result.timeline.summary.duplicates} duplicates`);
     } catch (error) {
       console.error('Error generating timeline:', error);
       alert('Failed to generate timeline. Check console for details.');
