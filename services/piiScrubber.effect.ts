@@ -29,6 +29,20 @@ const TARGET_ENTITIES = ["PER", "LOC", "ORG"] as const;
 type EntityType = (typeof TARGET_ENTITIES)[number];
 
 /**
+ * NER ENTITY TYPE (Explicit type for ML model output)
+ *
+ * Per Effect v3 best practices: NEVER use `any` - always explicit types
+ * This prevents TypeScript infinite inference with strict mode
+ */
+interface NEREntity {
+  readonly entity_group: string;
+  readonly word: string;
+  readonly start: number;
+  readonly end: number;
+  readonly score: number;
+}
+
+/**
  * PATTERNS (Regex for structural PII)
  */
 const PATTERNS = {
@@ -64,17 +78,7 @@ export interface MLModelService {
   readonly loadModel: Effect.Effect<void, MLModelError, never>;
   readonly infer: (
     text: string
-  ) => Effect.Effect<
-    Array<{
-      entity_group: string;
-      word: string;
-      start: number;
-      end: number;
-      score: number;
-    }>,
-    MLModelError,
-    never
-  >;
+  ) => Effect.Effect<ReadonlyArray<NEREntity>, MLModelError, never>;
 }
 
 export const MLModelService = Context.GenericTag<MLModelService>(
@@ -84,14 +88,30 @@ export const MLModelService = Context.GenericTag<MLModelService>(
 /**
  * ML MODEL IMPLEMENTATION (Live service)
  */
+/**
+ * Intl.Segmenter type (not in all TypeScript libs)
+ */
+interface IntlSegmenter {
+  segment(text: string): Iterable<{ segment: string }>;
+}
+
+/**
+ * ML Model Pipeline type (from transformers.js)
+ */
+type NERPipeline = (
+  text: string,
+  options: { aggregation_strategy: string; ignore_labels: string[] }
+) => Promise<NEREntity[]>;
+
 class MLModelServiceImpl implements MLModelService {
-  private pipe: any = null;
+  // Explicit types instead of `any` - prevents TS infinite inference
+  private pipe: NERPipeline | null = null;
   private loadPromise: Promise<void> | null = null;
-  private segmenter?: any;
+  private segmenter: IntlSegmenter | undefined;
 
   constructor() {
     if ("Segmenter" in Intl) {
-      this.segmenter = new (Intl as any).Segmenter("en", {
+      this.segmenter = new (Intl as unknown as { Segmenter: new (locale: string, options: { granularity: string }) => IntlSegmenter }).Segmenter("en", {
         granularity: "sentence",
       });
     }
@@ -110,9 +130,10 @@ class MLModelServiceImpl implements MLModelService {
     // Start loading
     this.loadPromise = (async () => {
       try {
+        // Cast options to any because transformers.js types don't include quantized
         this.pipe = await pipeline("token-classification", "Xenova/bert-base-NER", {
           quantized: true,
-        } as any);
+        } as Parameters<typeof pipeline>[2]) as unknown as NERPipeline;
         console.log("✅ NER Model loaded successfully");
       } catch (err) {
         this.loadPromise = null;
@@ -164,19 +185,13 @@ class MLModelServiceImpl implements MLModelService {
         })
       );
 
-      return result as Array<{
-        entity_group: string;
-        word: string;
-        start: number;
-        end: number;
-        score: number;
-      }>;
+      return result as NEREntity[];
     });
 
   getSentences(text: string): string[] {
     if (this.segmenter) {
-      return Array.from((this.segmenter as any).segment(text)).map(
-        (s: any) => s.segment
+      return Array.from(this.segmenter.segment(text)).map(
+        (s) => s.segment
       );
     }
     return text.match(/[^.!?]+[.!?]+]*/g) || [text];
@@ -185,8 +200,14 @@ class MLModelServiceImpl implements MLModelService {
 
 /**
  * ML MODEL LAYER (for Effect runtime)
+ *
+ * EXPLICIT TYPE ANNOTATION per Effect v3 best practices:
+ * Layer.Layer<Out, Error, In>
+ * - Out: MLModelService (what this layer provides)
+ * - Error: never (no errors during layer creation)
+ * - In: never (no dependencies)
  */
-export const MLModelServiceLive = Layer.succeed(
+export const MLModelServiceLive: Layer.Layer<MLModelService, never, never> = Layer.succeed(
   MLModelService,
   new MLModelServiceImpl()
 );
@@ -304,14 +325,14 @@ const regexPrePass = (text: string): ScrubState => {
  * PHASE 2: SMART CHUNKING
  */
 const smartChunk = (text: string, maxChunkSize = 2000): string[] => {
-  // Use sentence segmenter if available
-  const segmenter =
+  // Use sentence segmenter if available - explicit type casting
+  const segmenter: IntlSegmenter | null =
     "Segmenter" in Intl
-      ? new (Intl as any).Segmenter("en", { granularity: "sentence" })
+      ? new (Intl as unknown as { Segmenter: new (locale: string, options: { granularity: string }) => IntlSegmenter }).Segmenter("en", { granularity: "sentence" })
       : null;
 
-  const sentences = segmenter
-    ? Array.from((segmenter as any).segment(text)).map((s: any) => s.segment)
+  const sentences: string[] = segmenter
+    ? Array.from(segmenter.segment(text)).map((s) => s.segment)
     : text.match(/[^.!?]+[.!?]+]*/g) || [text];
 
   const chunks: string[] = [];
@@ -386,16 +407,16 @@ const mlInference = (
         )
       );
 
-      // Filter high-confidence entities
-      const entities = entitiesResult.filter(
-        (e: any) =>
+      // Filter high-confidence entities - explicit NEREntity type
+      const entities: NEREntity[] = entitiesResult.filter(
+        (e: NEREntity) =>
           TARGET_ENTITIES.includes(e.entity_group as EntityType) && e.score > 0.85
       );
 
       // Warn on low-confidence detections
       entitiesResult
-        .filter((e: any) => e.score <= 0.85 && e.score > 0.5)
-        .forEach((e: any) => {
+        .filter((e: NEREntity) => e.score <= 0.85 && e.score > 0.5)
+        .forEach((e: NEREntity) => {
           errorCollector.add(
             new PIIDetectionWarning({
               entity: e.word,
@@ -409,14 +430,14 @@ const mlInference = (
           );
         });
 
-      // Sort by start index
-      entities.sort((a: any, b: any) => a.start - b.start);
+      // Sort by start index - explicit types prevent inference issues
+      entities.sort((a: NEREntity, b: NEREntity) => a.start - b.start);
 
       let chunkCursor = 0;
       let scrubbedChunk = "";
 
       for (const entity of entities) {
-        const { entity_group, start, end } = entity as any;
+        const { entity_group, start, end } = entity;
 
         scrubbedChunk += chunk.substring(chunkCursor, start);
         const originalText = chunk.substring(start, end);
