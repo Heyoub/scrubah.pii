@@ -28,12 +28,15 @@ export const parseFile = async (file: File): Promise<string> => {
     } else if (fileType.startsWith('image/')) {
       return await parseImage(file);
     } else if (
-      fileType === 'text/plain' || 
-      fileType === 'text/csv' || 
-      fileType === 'text/markdown' ||
-      fileType === 'application/json' ||
+      // Use startsWith for text types - browsers add charset suffix (e.g., text/plain;charset=utf-8)
+      fileType.startsWith('text/plain') ||
+      fileType.startsWith('text/csv') ||
+      fileType.startsWith('text/markdown') ||
+      fileType.startsWith('application/json') ||
       file.name.endsWith('.md') ||
-      file.name.endsWith('.csv')
+      file.name.endsWith('.csv') ||
+      file.name.endsWith('.txt') ||
+      file.name.endsWith('.json')
     ) {
       return await file.text();
     } else {
