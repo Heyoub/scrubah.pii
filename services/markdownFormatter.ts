@@ -15,7 +15,9 @@ interface FrontmatterMetadata {
   processing_engine: string;
   processing_seconds: string;
   hipaa_compliant: boolean;
-  [key: string]: any;
+  // Index signature for additional metadata fields
+  // Allowed types: primitives only (no nested objects for YAML simplicity)
+  [key: string]: string | number | boolean | undefined;
 }
 
 /**

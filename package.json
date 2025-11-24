@@ -1,6 +1,7 @@
 {
   "name": "scrubah-pii",
   "version": "1.0.0",
+  "type": "module",
   "description": "Forensic medical data sanitizer - Zero-trust PII scrubbing + LLM-optimized timeline generation",
   "author": "Heyoub <hello@forgestack.app>",
   "license": "MIT",
@@ -43,8 +44,11 @@
     "@testing-library/react": "^14.0.0",
     "@testing-library/user-event": "^14.5.1",
     "@types/jest": "^29.5.11",
+    "@typescript-eslint/eslint-plugin": "^8.48.0",
+    "@typescript-eslint/parser": "^8.48.0",
     "@vitejs/plugin-react": "^5.1.1",
     "@vitest/ui": "^1.1.0",
+    "eslint": "^9.39.1",
     "jsdom": "^23.0.1",
     "typescript": "^5.9.3",
     "vite": "^7.2.4",
@@ -56,6 +60,9 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest --coverage"
+    "test:coverage": "vitest --coverage",
+    "lint": "eslint . --ext .ts,.tsx",
+    "lint:strict": "eslint schemas/ types.ts --max-warnings 0",
+    "lint:fix": "eslint . --ext .ts,.tsx --fix"
   }
 }
