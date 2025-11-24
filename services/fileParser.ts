@@ -182,7 +182,7 @@ const getMode = (arr: string[]): { value: string, count: number } | null => {
     if (arr.length === 0) return null;
     const counts = new Map<string, number>();
     let maxCount = 0;
-    let modeValue = null;
+    let modeValue: string | null = null;
     for (const item of arr) {
         const newCount = (counts.get(item) || 0) + 1;
         counts.set(item, newCount);

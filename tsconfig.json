@@ -1,29 +1,55 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "experimentalDecorators": true,
-    "useDefineForClassFields": false,
     "module": "ESNext",
-    "lib": [
-      "ES2022",
-      "DOM",
-      "DOM.Iterable"
-    ],
-    "skipLibCheck": true,
-    "types": [
-      "node"
-    ],
     "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+
+    "jsx": "react-jsx",
+    "allowJs": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
     "isolatedModules": true,
     "moduleDetection": "force",
-    "allowJs": true,
-    "jsx": "react-jsx",
+
+    "skipLibCheck": true,
+    "types": ["node"],
+
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["./*"]
     },
-    "allowImportingTsExtensions": true,
-    "noEmit": true
+
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false,
+
+    // ============================================
+    // EFFECT-TS COMPATIBLE STRICT MODE (HIPAA-Safe)
+    // ============================================
+    // Based on Effect-TS official tsconfig.base.json
+    // https://github.com/Effect-TS/effect/blob/main/tsconfig.base.json
+    //
+    // NOTE: noImplicitAny MUST be false with Effect-TS v3
+    // TypeScript's type inference causes stack overflow with Effect's
+    // complex generic types when noImplicitAny is enabled.
+    // This is a known limitation - the branded PHI types provide
+    // compile-time HIPAA safety instead.
+
+    "strict": false,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "noImplicitAny": false,      // REQUIRED: Effect-TS stack overflow workaround
+    "noImplicitThis": true,
+    "noImplicitReturns": false,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": false,     // Effect-TS has many internal unused vars
+    "noUnusedParameters": false,
+    "forceConsistentCasingInFileNames": true,
+
+    // These are DISABLED per Effect-TS config
+    "noUncheckedIndexedAccess": false,
+    // exactOptionalPropertyTypes causes issues with Effect-TS
+    "exactOptionalPropertyTypes": false
   }
 }

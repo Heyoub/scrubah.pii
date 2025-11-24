@@ -75,10 +75,8 @@ const MRN_CONTEXT_KEYWORDS = [
  * end
  */
 export interface MLModelService {
-  readonly loadModel: Effect.Effect<void, MLModelError, never>;
-  readonly infer: (
-    text: string
-  ) => Effect.Effect<ReadonlyArray<NEREntity>, MLModelError, never>;
+  loadModel(): Effect.Effect<void, MLModelError, never>;
+  infer(text: string): Effect.Effect<ReadonlyArray<NEREntity>, MLModelError, never>;
 }
 
 export const MLModelService = Context.GenericTag<MLModelService>(
@@ -86,7 +84,7 @@ export const MLModelService = Context.GenericTag<MLModelService>(
 );
 
 /**
- * ML MODEL IMPLEMENTATION (Live service)
+ * ML MODEL IMPLEMENTATION (Factory pattern - avoids `this` inference issues)
  */
 /**
  * Intl.Segmenter type (not in all TypeScript libs)
@@ -103,47 +101,38 @@ type NERPipeline = (
   options: { aggregation_strategy: string; ignore_labels: string[] }
 ) => Promise<NEREntity[]>;
 
-class MLModelServiceImpl implements MLModelService {
-  // Explicit types instead of `any` - prevents TS infinite inference
-  private pipe: NERPipeline | null = null;
-  private loadPromise: Promise<void> | null = null;
-  private segmenter: IntlSegmenter | undefined;
+/**
+ * Factory function creates MLModelService without `this` inference issues
+ * This pattern avoids TypeScript strict mode stack overflow
+ */
+function createMLModelService(): MLModelService {
+  // Captured state (no `this` needed)
+  let pipe: NERPipeline | null = null;
+  let loadPromise: Promise<void> | null = null;
+  const segmenter: IntlSegmenter | undefined =
+    "Segmenter" in Intl
+      ? new (Intl as unknown as { Segmenter: new (locale: string, options: { granularity: string }) => IntlSegmenter }).Segmenter("en", { granularity: "sentence" })
+      : undefined;
 
-  constructor() {
-    if ("Segmenter" in Intl) {
-      this.segmenter = new (Intl as unknown as { Segmenter: new (locale: string, options: { granularity: string }) => IntlSegmenter }).Segmenter("en", {
-        granularity: "sentence",
-      });
-    }
-  }
+  const loadModel = (): Effect.Effect<void, MLModelError, never> => {
+    return Effect.suspend(() => {
+      if (pipe) return Effect.void;
+      if (loadPromise) return Effect.promise(() => loadPromise!);
 
-  readonly loadModel = Effect.gen(this, function* (_) {
-    // If already loaded, return immediately
-    if (this.pipe) return;
+      loadPromise = (async () => {
+        try {
+          pipe = await pipeline("token-classification", "Xenova/bert-base-NER", {
+            quantized: true,
+          } as Parameters<typeof pipeline>[2]) as unknown as NERPipeline;
+          console.log("✅ NER Model loaded successfully");
+        } catch (err) {
+          loadPromise = null;
+          throw err;
+        }
+      })();
 
-    // If currently loading, wait for promise
-    if (this.loadPromise) {
-      yield* _(Effect.promise(() => this.loadPromise!));
-      return;
-    }
-
-    // Start loading
-    this.loadPromise = (async () => {
-      try {
-        // Cast options to any because transformers.js types don't include quantized
-        this.pipe = await pipeline("token-classification", "Xenova/bert-base-NER", {
-          quantized: true,
-        } as Parameters<typeof pipeline>[2]) as unknown as NERPipeline;
-        console.log("✅ NER Model loaded successfully");
-      } catch (err) {
-        this.loadPromise = null;
-        throw err;
-      }
-    })();
-
-    yield* _(
-      Effect.tryPromise({
-        try: () => this.loadPromise!,
+      return Effect.tryPromise({
+        try: () => loadPromise!,
         catch: (error) =>
           new MLModelError({
             modelName: "Xenova/bert-base-NER",
@@ -151,51 +140,51 @@ class MLModelServiceImpl implements MLModelService {
             fallbackUsed: false,
             suggestion: "Check network connection and retry",
           }),
-      })
-    );
-  });
-
-  readonly infer = (text: string) =>
-    Effect.gen(this, function* (_) {
-      // Ensure model is loaded
-      if (!this.pipe) {
-        yield* _(this.loadModel);
-      }
-
-      // Run inference with timeout
-      const result = yield* _(
-        Effect.tryPromise({
-          try: () =>
-            Promise.race([
-              this.pipe(text, {
-                aggregation_strategy: "simple",
-                ignore_labels: ["O"],
-              }),
-              new Promise((_, reject) =>
-                setTimeout(() => reject(new Error("Processing timeout")), 30000)
-              ),
-            ]),
-          catch: (error) =>
-            new MLModelError({
-              modelName: "Xenova/bert-base-NER",
-              reason: error instanceof Error ? error.message : String(error),
-              fallbackUsed: false,
-              suggestion: "Try reducing text size or check model availability",
-            }),
-        })
-      );
-
-      return result as NEREntity[];
+      });
     });
+  };
 
-  getSentences(text: string): string[] {
-    if (this.segmenter) {
-      return Array.from(this.segmenter.segment(text)).map(
-        (s) => s.segment
+  const infer = (text: string): Effect.Effect<ReadonlyArray<NEREntity>, MLModelError, never> => {
+    return Effect.suspend(() => {
+      const loadFirst = pipe ? Effect.void : loadModel();
+
+      return loadFirst.pipe(
+        Effect.flatMap(() =>
+          Effect.tryPromise({
+            try: () =>
+              Promise.race([
+                pipe!(text, {
+                  aggregation_strategy: "simple",
+                  ignore_labels: ["O"],
+                }),
+                new Promise<NEREntity[]>((_, reject) =>
+                  setTimeout(() => reject(new Error("Processing timeout")), 30000)
+                ),
+              ]),
+            catch: (error) =>
+              new MLModelError({
+                modelName: "Xenova/bert-base-NER",
+                reason: error instanceof Error ? error.message : String(error),
+                fallbackUsed: false,
+                suggestion: "Try reducing text size or check model availability",
+              }),
+          })
+        ),
+        Effect.map((result) => result as ReadonlyArray<NEREntity>)
       );
-    }
-    return text.match(/[^.!?]+[.!?]+]*/g) || [text];
+    });
+  };
+
+  return { loadModel, infer };
+}
+
+// Helper for sentence segmentation (separate from ML service)
+function getSentences(text: string): string[] {
+  if ("Segmenter" in Intl) {
+    const segmenter = new (Intl as unknown as { Segmenter: new (locale: string, options: { granularity: string }) => IntlSegmenter }).Segmenter("en", { granularity: "sentence" });
+    return Array.from(segmenter.segment(text)).map((s) => s.segment);
   }
+  return text.match(/[^.!?]+[.!?]+]*/g) || [text];
 }
 
 /**
@@ -209,7 +198,7 @@ class MLModelServiceImpl implements MLModelService {
  */
 export const MLModelServiceLive: Layer.Layer<MLModelService, never, never> = Layer.succeed(
   MLModelService,
-  new MLModelServiceImpl()
+  createMLModelService()
 );
 
 /**

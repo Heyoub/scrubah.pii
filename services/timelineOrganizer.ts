@@ -139,9 +139,9 @@ export const buildMasterTimeline = async (
     const date = extractPrimaryDate(file.originalName, file.scrubbedText);
     const fingerprint = await generateFingerprint(file.originalName, file.scrubbedText);
 
-    // Extract lab data if applicable
+    // Extract lab data if applicable (convert null to undefined)
     const labData = fingerprint.documentType === DocumentType.LAB_REPORT
-      ? extractLabResults(file.scrubbedText, date.toLocaleDateString())
+      ? extractLabResults(file.scrubbedText, date.toLocaleDateString()) ?? undefined
       : undefined;
 
     timelineDocuments.push({
