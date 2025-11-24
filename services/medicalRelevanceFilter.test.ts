@@ -9,7 +9,6 @@ import { Effect } from 'effect';
 import {
   calculateRelevanceScore,
   collectGarbage,
-  filterRelevantDocuments,
   RelevanceScoreSchema
 } from './medicalRelevanceFilter';
 import { ProcessedFile, ProcessingStage } from '../types';

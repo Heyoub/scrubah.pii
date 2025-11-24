@@ -1,5 +1,4 @@
 import { ProcessedFile, ScrubResult } from '../types';
-import { ScrubbedText, toExportableString } from '../schemas/phi';
 
 /**
  * HIPAA COMPLIANCE NOTE:

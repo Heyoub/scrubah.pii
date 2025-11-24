@@ -20,10 +20,8 @@ import { Effect } from "effect";
 import {
   CompressedTimeline,
   TimelineEntry,
-  YAMLOutput,
-  YAMLMetadata,
 } from "./schema";
-import { ErrorCollector, ErrorRecord } from "./errors";
+import { ErrorCollector } from "./errors";
 
 /**
  * YAML string builder (mutable builder pattern)

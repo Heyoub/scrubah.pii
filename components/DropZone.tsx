@@ -1,6 +1,6 @@
 
 import React, { useCallback, useState } from 'react';
-import { Upload, FilePlus, FileType, TerminalSquare, ScanLine, FileSpreadsheet } from 'lucide-react';
+import { Upload, FilePlus, FileType, ScanLine, FileSpreadsheet } from 'lucide-react';
 import { clsx } from 'clsx';
 
 interface DropZoneProps {

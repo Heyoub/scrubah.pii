@@ -17,12 +17,10 @@
  * 5. Generate YAML with error collection (Effect)
  */
 
-import { Effect, pipe, Array as EffectArray, Schema as S } from "effect";
+import { Effect } from "effect";
 import {
   CompressedTimeline,
-  CompressedTimelineSchema,
   TimelineEntry,
-  TimelineEntrySchema,
   TimelineEventType,
   ConfidenceLevel,
   MedicationSummary,
@@ -35,9 +33,7 @@ import {
 import {
   CompressionError,
   ParseError,
-  ValidationError,
   DateAmbiguityError,
-  OCRWarning,
   DeduplicationError,
   CompressionSizeExceededError,
   ErrorCollector,
@@ -72,8 +68,9 @@ export type ProgressCallback = (progress: CompressionProgress) => void;
 
 /**
  * Compression Context (carries state through pipeline)
+ * @internal Reserved for future pipeline refactor
  */
-interface CompressionContext {
+interface _CompressionContext {
   documents: ProcessedDocument[];
   options: CompressionOptions;
   errorCollector: ErrorCollector;
@@ -224,7 +221,7 @@ const parseDate = (
 
       return date;
     }
-  } catch (error) {
+  } catch {
     errorCollector.add(
       new ParseError({
         file: filename,
