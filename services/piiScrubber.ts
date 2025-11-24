@@ -199,8 +199,17 @@ class PiiScrubberService {
     return this.loadPromise;
   }
 
-  public async scrub(text: string): Promise<ScrubResult> {
-    if (!this.pipe) await this.loadModel();
+  /**
+   * Scrub PII from text
+   * @param text - The text to scrub
+   * @param options - Scrubbing options
+   * @param options.regexOnly - If true, skip ML model and use only regex patterns (faster, deterministic)
+   */
+  public async scrub(text: string, options?: { regexOnly?: boolean }): Promise<ScrubResult> {
+    const { regexOnly = false } = options || {};
+
+    // Only load ML model if not in regex-only mode
+    if (!regexOnly && !this.pipe) await this.loadModel();
 
     const globalReplacements: PIIMap = {};
     let totalReplacements = 0;
@@ -286,6 +295,27 @@ class PiiScrubberService {
     if (currentChunk) chunks.push(currentChunk);
 
     // --- PHASE 3: ML INFERENCE ---
+    // Skip ML inference if regexOnly mode is enabled (for testing/fast scrubbing)
+    if (regexOnly) {
+      console.log('⚡ Regex-only mode: skipping ML inference');
+      const finalScrubbedText = chunks.join('');
+
+      // Run secondary validation pass even in regex-only mode
+      // Note: secondaryValidationPass mutates globalReplacements in-place
+      const { text: validatedText, additionalCount } = this.secondaryValidationPass(
+        finalScrubbedText,
+        entityToPlaceholder,
+        counters,
+        globalReplacements
+      );
+
+      return {
+        text: validatedText,
+        replacements: globalReplacements,
+        count: Object.keys(globalReplacements).length,
+      };
+    }
+
     let finalScrubbedText = '';
 
     console.log(`🔍 Processing ${chunks.length} chunks for PII detection...`);
@@ -311,7 +341,7 @@ class PiiScrubberService {
 
       // Performance: Batch with timeout to prevent blocking UI
       const output = await Promise.race([
-        this.pipe(chunk, {
+        this.pipe!(chunk, {
           aggregation_strategy: 'simple',
           ignore_labels: ['O']
         }),
