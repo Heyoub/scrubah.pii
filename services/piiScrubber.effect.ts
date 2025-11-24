@@ -16,10 +16,10 @@
  * 4. Result validation (Effect Schema)
  */
 
-import { Effect, Context, Layer, pipe, ParseResult } from "effect";
+import { Effect, Context, Layer, pipe } from "effect";
 import { pipeline, env } from "@huggingface/transformers";
 import { ScrubResult, PIIMap, ScrubResultSchema, decodeScrubResult } from "../schemas";
-import { AppError, MLModelError, PIIDetectionWarning, SchemaValidationError, ErrorCollector } from "./errors";
+import { AppError, MLModelError, PIIDetectionWarning, ErrorCollector } from "./errors";
 
 // Configure Hugging Face
 env.allowLocalModels = false;
@@ -38,8 +38,6 @@ const PATTERNS = {
   DATE: /\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b/g,
   CREDIT_CARD: /\b(?:\d{4}[-\s]?){3}\d{4}\b/g,
   ZIPCODE: /\b\d{5}(?:-\d{4})?\b/g,
-  // Medical document header names (LASTNAME, FIRSTNAME format)
-  PATIENT_NAME: /^([A-Z]{2,}),\s+([A-Z]{2,})$/gm,
 } as const;
 
 const MRN_CONTEXT_KEYWORDS = [
@@ -194,17 +192,6 @@ export const MLModelServiceLive = Layer.succeed(
 );
 
 /**
- * HELPER: Extract field name from ParseError for debugging
- *
- * This helps identify which schema field failed validation
- */
-const extractFieldFromParseError = (error: ParseResult.ParseError): string => {
-  // Simplified version - just return "validation_error"
-  // The full error details are logged via ArrayFormatter below
-  return "validation_error";
-};
-
-/**
  * CONTEXT-AWARE MRN DETECTION
  */
 const detectContextualMRN = (
@@ -289,7 +276,6 @@ const regexPrePass = (text: string): ScrubState => {
     }
   };
 
-  runRegex("PER", PATTERNS.PATIENT_NAME, "NAME");
   runRegex("EMAIL", PATTERNS.EMAIL, "EMAIL");
   runRegex("PHONE", PATTERNS.PHONE, "PHONE");
   runRegex("ID", PATTERNS.SSN, "SSN");
@@ -354,69 +340,61 @@ const mlInference = (
   state: ScrubState,
   errorCollector: ErrorCollector
 ): Effect.Effect<ScrubState, never, MLModelService> => {
-  return pipe(
-    Effect.gen(function* (_) {
-      const mlModel = yield* _(MLModelService);
-      let finalText = "";
-      const replacements: Record<string, string> = { ...state.replacements };
-      const counters: Record<string, number> = { ...state.counters };
-      const entityToPlaceholder: Record<string, string> = Object.fromEntries(
-        Object.entries(replacements).map(([k, v]) => [k, v])
+  return Effect.gen(function* (_) {
+    const mlModel = yield* _(MLModelService);
+    let finalText = "";
+    const replacements: Record<string, string> = { ...state.replacements };
+    const counters: Record<string, number> = { ...state.counters };
+    const entityToPlaceholder: Record<string, string> = Object.fromEntries(
+      Object.entries(replacements).map(([k, v]) => [k, v])
+    );
+
+    console.log(`🔍 Processing ${chunks.length} chunks for PII detection...`);
+    const startTime = performance.now();
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+
+      // Progress indicator
+      if (chunks.length > 10 && i % 5 === 0) {
+        console.log(
+          `⏳ Progress: ${i}/${chunks.length} chunks (${Math.round((i / chunks.length) * 100)}%)`
+        );
+      }
+
+      // Skip empty chunks
+      if (!chunk.trim()) {
+        finalText += chunk;
+        continue;
+      }
+
+      // Skip chunks that are only placeholders
+      if (/^(\s*\[[A-Z_]+\d+\]\s*)+$/.test(chunk)) {
+        finalText += chunk;
+        continue;
+      }
+
+      // Run ML inference (with error handling)
+      const entitiesResult = yield* _(
+        pipe(
+          mlModel.infer(chunk),
+          Effect.catchAll((error) => {
+            // On ML failure, use regex-only (graceful degradation)
+            errorCollector.add(error);
+            return Effect.succeed([]);
+          })
+        )
       );
 
-      console.log(`🔍 Processing ${chunks.length} chunks for PII detection...`);
-      const startTime = performance.now();
-
-      for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
-
-        // Progress indicator
-        if (chunks.length > 10 && i % 5 === 0) {
-          console.log(
-            `⏳ Progress: ${i}/${chunks.length} chunks (${Math.round((i / chunks.length) * 100)}%)`
-          );
-        }
-
-        // Skip empty chunks
-        if (!chunk.trim()) {
-          finalText += chunk;
-          continue;
-        }
-
-        // Skip chunks that are only placeholders
-        if (/^(\s*\[[A-Z_]+\d+\]\s*)+$/.test(chunk)) {
-          finalText += chunk;
-          continue;
-        }
-
-        // Run ML inference (with error handling) - annotate each chunk with span
-        const entitiesResult = yield* _(
-          pipe(
-            mlModel.infer(chunk),
-            Effect.catchAll((error) => {
-              // On ML failure, use regex-only (graceful degradation)
-              errorCollector.add(error);
-              return Effect.succeed([]);
-            }),
-            Effect.withSpan("ml-inference.chunk", {
-              attributes: {
-                chunkIndex: i,
-                chunkLength: chunk.length,
-                totalChunks: chunks.length
-              }
-            })
-          )
-        );
-
-      // Filter entities - use LOWER threshold for medical PII (err on side of caution)
+      // Filter high-confidence entities
       const entities = entitiesResult.filter(
         (e: any) =>
-          TARGET_ENTITIES.includes(e.entity_group as EntityType) && e.score > 0.50
+          TARGET_ENTITIES.includes(e.entity_group as EntityType) && e.score > 0.85
       );
 
       // Warn on low-confidence detections
       entitiesResult
-        .filter((e: any) => e.score <= 0.50 && e.score > 0.3)
+        .filter((e: any) => e.score <= 0.85 && e.score > 0.5)
         .forEach((e: any) => {
           errorCollector.add(
             new PIIDetectionWarning({
@@ -464,21 +442,14 @@ const mlInference = (
       finalText += scrubbedChunk;
     }
 
-      const processingTime = ((performance.now() - startTime) / 1000).toFixed(2);
-      const count = Object.keys(replacements).length;
-      console.log(
-        `✅ PII scrubbing complete in ${processingTime}s (${count} entities redacted)`
-      );
+    const processingTime = ((performance.now() - startTime) / 1000).toFixed(2);
+    const count = Object.keys(replacements).length;
+    console.log(
+      `✅ PII scrubbing complete in ${processingTime}s (${count} entities redacted)`
+    );
 
-      return { text: finalText, replacements, counters };
-    }),
-    // Wrap all chunk processing in parent span
-    Effect.withSpan("ml-inference.all-chunks", {
-      attributes: {
-        totalChunks: chunks.length
-      }
-    })
-  );
+    return { text: finalText, replacements, counters };
+  });
 };
 
 /**
@@ -494,121 +465,46 @@ export const scrubPII = (
   never,
   MLModelService
 > => {
-  return pipe(
-    Effect.gen(function* (_) {
-      const errorCollector = new ErrorCollector();
+  return Effect.gen(function* (_) {
+    const errorCollector = new ErrorCollector();
 
-      // Phase 1: Regex pre-pass (pure) - annotate with span
-      const afterRegex = yield* _(
-        Effect.sync(() => regexPrePass(text)),
-        Effect.withSpan("pii-scrubber.regex-prepass", {
-          attributes: {
-            textLength: text.length,
-            phase: "regex-prepass"
-          }
+    // Phase 1: Regex pre-pass (pure)
+    const afterRegex = regexPrePass(text);
+
+    // Phase 2: Smart chunking (pure)
+    const chunks = smartChunk(afterRegex.text);
+
+    // Phase 3: ML inference (Effect)
+    const finalState = yield* _(mlInference(chunks, afterRegex, errorCollector));
+
+    // Build result
+    const result: ScrubResult = {
+      text: finalState.text,
+      replacements: finalState.replacements,
+      count: Object.keys(finalState.replacements).length,
+    };
+
+    // Validate with Effect Schema
+    const validated = yield* _(
+      pipe(
+        decodeScrubResult(result),
+        Effect.catchAll((error) => {
+          // Schema validation failed - this shouldn't happen, but log it
+          console.error("Schema validation failed:", error);
+          return Effect.succeed(result);
         })
-      );
+      )
+    );
 
-      // Phase 2: Smart chunking (pure) - annotate with span
-      const chunks = yield* _(
-        Effect.sync(() => smartChunk(afterRegex.text)),
-        Effect.withSpan("pii-scrubber.chunking", {
-          attributes: {
-            textLength: afterRegex.text.length,
-            chunkCount: 0,
-            phase: "chunking"
-          }
-        })
-      );
-
-      // Phase 3: ML inference (Effect) - annotate with span
-      const finalState = yield* _(
-        mlInference(chunks, afterRegex, errorCollector),
-        Effect.withSpan("pii-scrubber.ml-inference", {
-          attributes: {
-            chunkCount: chunks.length,
-            phase: "ml-inference"
-          }
-        })
-      );
-
-      // Build result
-      const result: ScrubResult = {
-        text: finalState.text,
-        replacements: finalState.replacements,
-        count: Object.keys(finalState.replacements).length,
-      };
-
-      // Phase 4: Validate with Effect Schema (strict - no fallback!) - annotate with span
-      const validated = yield* _(
-        pipe(
-          decodeScrubResult(result),
-          Effect.mapError((parseError) => {
-            // Log validation failure
-            console.error("=== SCHEMA VALIDATION FAILED ===");
-            console.error("Parse error:", parseError);
-
-            // Create structured error for error collector
-            const schemaError = new SchemaValidationError({
-              schema: "ScrubResult",
-              field: extractFieldFromParseError(parseError),
-              expected: "Valid ScrubResult with count === replacements.length",
-              actual: JSON.stringify(result, null, 2),
-              suggestion: "Check PII scrubber logic - invariant violation detected",
-            });
-
-            // Add to error collector for visibility
-            errorCollector.add(schemaError);
-
-            // Return the error to propagate it
-            return schemaError;
-          }),
-          // If validation fails, we want to know! Don't silently succeed.
-          Effect.catchTag("SchemaValidationError", (error) => {
-            // Log but continue with best-effort result
-            console.warn("⚠️  Continuing with potentially invalid result due to schema error");
-            return Effect.succeed(result as ScrubResult);
-          }),
-          Effect.withSpan("pii-scrubber.validation", {
-            attributes: {
-              resultCount: result.count,
-              replacementsSize: Object.keys(result.replacements).length,
-              phase: "validation"
-            }
-          })
-        )
-      );
-
-      return { result: validated, errors: errorCollector };
-    }),
-    // Wrap entire pipeline in parent span for full execution tracing
-    Effect.withSpan("pii-scrubber.pipeline", {
-      attributes: {
-        inputLength: text.length
-      }
-    })
-  );
+    return { result: validated, errors: errorCollector };
+  });
 };
 
 /**
  * HELPER: Run scrubber (for easy migration from Promise-based code)
  */
 export const runScrubPII = async (text: string): Promise<ScrubResult> => {
-  const program = pipe(
-    scrubPII(text),
-    Effect.provide(MLModelServiceLive),
-    // Enable span logging and error cause tracking for debugging
-    Effect.tapDefect((defect) => {
-      console.error("=== EFFECT DEFECT (UNHANDLED ERROR) ===");
-      console.error(defect);
-      return Effect.void;
-    }),
-    Effect.tapErrorCause((cause) => {
-      console.error("=== EFFECT ERROR CAUSE ===");
-      console.error(cause);
-      return Effect.void;
-    })
-  );
+  const program = pipe(scrubPII(text), Effect.provide(MLModelServiceLive));
 
   const { result, errors } = await Effect.runPromise(program);
 

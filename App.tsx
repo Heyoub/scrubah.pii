@@ -8,27 +8,48 @@ import {
   Github,
   Mail,
   Cpu,
-  Calendar
+  Calendar,
+  Minimize2
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { clsx } from 'clsx';
 
 import { DropZone } from './components/DropZone';
 import { StatusBoard } from './components/StatusBoard';
-import { runParseFile } from './services/fileParser.effect';
-import { runScrubPII } from './services/piiScrubber.effect';
+import { parseFile } from './services/fileParser';
+import { piiScrubber } from './services/piiScrubber';
 import { formatToMarkdown } from './services/markdownFormatter';
-import { runBuildMasterTimeline } from './services/timelineOrganizer.effect';
+import { buildMasterTimeline } from './services/timelineOrganizer';
+import { runCompression, defaultCompressionOptions, generateYAMLFromResult } from './services/compression';
+import type { ProcessedDocument } from './services/compression';
 import { db } from './services/db';
-import type { ProcessedFile, ProcessingStage } from './schemas';
+import { ProcessedFile, ProcessingStage } from './types';
 
 const App: React.FC = () => {
   const [files, setFiles] = useState<ProcessedFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [modelLoading, setModelLoading] = useState(false);
+  const [modelError, setModelError] = useState<string | null>(null);
   const [isGeneratingTimeline, setIsGeneratingTimeline] = useState(false);
+  const [isCompressing, setIsCompressing] = useState(false);
+  const [compressionProgress, setCompressionProgress] = useState<string>('');
 
   useEffect(() => {
-    // Load saved files from IndexedDB
+    const initModel = async () => {
+      setModelLoading(true);
+      setModelError(null);
+      try {
+        await piiScrubber.loadModel();
+      } catch (e) {
+        const errorMsg = e instanceof Error ? e.message : 'Unknown error loading ML model';
+        console.error("Model failed to load", e);
+        setModelError(errorMsg);
+      } finally {
+        setModelLoading(false);
+      }
+    };
+    initModel();
+    
     db.files.toArray().then(savedFiles => {
       if (savedFiles.length > 0) {
         setFiles(savedFiles);
@@ -37,19 +58,21 @@ const App: React.FC = () => {
   }, []);
 
   const handleFilesDropped = useCallback(async (droppedFiles: File[]) => {
-    // Effect-TS handles model loading automatically
+    if (!modelLoading) {
+        piiScrubber.loadModel().catch(console.error);
+    }
 
     const newFiles: ProcessedFile[] = droppedFiles.map(f => ({
       id: crypto.randomUUID(),
       originalName: f.name,
       size: f.size,
       type: f.type,
-      stage: "QUEUED"
+      stage: ProcessingStage.QUEUED
     }));
 
     setFiles(prev => [...prev, ...newFiles]);
     processQueue(droppedFiles, newFiles);
-  }, []);
+  }, [modelLoading]);
 
   const processQueue = async (rawFiles: File[], fileEntries: ProcessedFile[]) => {
     setIsProcessing(true);
@@ -61,15 +84,15 @@ const App: React.FC = () => {
 
       try {
         // 1. Parsing Stage
-        updateFileStatus(fileEntry.id, "PARSING");
-        const rawText = await runParseFile(rawFile);
+        updateFileStatus(fileEntry.id, ProcessingStage.PARSING);
+        const rawText = await parseFile(rawFile);
 
         // 2. Scrubbing Stage
-        updateFileStatus(fileEntry.id, "SCRUBBING", { rawText });
-        const scrubResult = await runScrubPII(rawText);
+        updateFileStatus(fileEntry.id, ProcessingStage.SCRUBBING, { rawText });
+        const scrubResult = await piiScrubber.scrub(rawText);
 
         // 3. Formatting Stage
-        updateFileStatus(fileEntry.id, "FORMATTING");
+        updateFileStatus(fileEntry.id, ProcessingStage.FORMATTING);
         
         const processingTimeMs = performance.now() - startTime;
         const markdown = formatToMarkdown(fileEntry, scrubResult, processingTimeMs);
@@ -79,9 +102,9 @@ const App: React.FC = () => {
           processingTimeMs
         };
 
-        const completedFile: ProcessedFile = {
+        const completedFile = {
           ...fileEntry,
-          stage: "COMPLETED",
+          stage: ProcessingStage.COMPLETED,
           scrubbedText: scrubResult.text,
           markdown,
           stats
@@ -92,7 +115,7 @@ const App: React.FC = () => {
 
       } catch (error: any) {
         console.error(`Error processing ${fileEntry.originalName}`, error);
-        updateFileStatus(fileEntry.id, "ERROR", { error: error.message });
+        updateFileStatus(fileEntry.id, ProcessingStage.ERROR, { error: error.message });
       }
     }
 
@@ -107,6 +130,19 @@ const App: React.FC = () => {
     setFiles(prev => prev.map(f => f.id === id ? fullFile : f));
   };
 
+  const handleRetryModelLoad = async () => {
+    setModelLoading(true);
+    setModelError(null);
+    try {
+      await piiScrubber.loadModel();
+    } catch (e) {
+      const errorMsg = e instanceof Error ? e.message : 'Unknown error loading ML model';
+      console.error("Model failed to load", e);
+      setModelError(errorMsg);
+    } finally {
+      setModelLoading(false);
+    }
+  };
 
   const handleClearAll = async () => {
     if (window.confirm("PURGE MEMORY?\nThis will permanently delete all processed files from this session.")) {
@@ -128,7 +164,7 @@ const App: React.FC = () => {
 
   const handleDownloadZip = async () => {
     const zip = new JSZip();
-    const processed = files.filter(f => f.stage === "COMPLETED" && f.markdown);
+    const processed = files.filter(f => f.stage === ProcessingStage.COMPLETED && f.markdown);
 
     if (processed.length === 0) return;
 
@@ -146,7 +182,7 @@ const App: React.FC = () => {
   };
 
   const handleGenerateTimeline = async () => {
-    const completedFiles = files.filter(f => f.stage === "COMPLETED" && f.scrubbedText);
+    const completedFiles = files.filter(f => f.stage === ProcessingStage.COMPLETED && f.scrubbedText);
 
     if (completedFiles.length === 0) {
       alert('No processed files to compile. Please process some documents first.');
@@ -157,9 +193,10 @@ const App: React.FC = () => {
 
     try {
       console.log(`📊 Generating master timeline from ${completedFiles.length} documents...`);
-      const result = await runBuildMasterTimeline(completedFiles);
+      const timeline = await buildMasterTimeline(completedFiles);
 
-      const blob = new Blob([result.markdown], { type: 'text/markdown; charset=utf-8' });
+      // Download automatically
+      const blob = new Blob([timeline.markdown], { type: 'text/markdown; charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -168,7 +205,8 @@ const App: React.FC = () => {
       URL.revokeObjectURL(url);
 
       console.log('✅ Master timeline generated successfully!');
-      console.log(`📈 Stats: ${result.summary.totalDocuments} total, ${result.summary.uniqueDocuments} unique, ${result.summary.duplicates} duplicates`);
+      console.log(`📈 Stats: ${timeline.summary.totalDocuments} total, ${timeline.summary.uniqueDocuments} unique, ${timeline.summary.duplicates} duplicates`);
+
     } catch (error) {
       console.error('Error generating timeline:', error);
       alert('Failed to generate timeline. Check console for details.');
@@ -177,7 +215,71 @@ const App: React.FC = () => {
     }
   };
 
-  const completedCount = files.filter(f => f.stage === "COMPLETED").length;
+  const handleCompressTimeline = async () => {
+    const completedFiles = files.filter(f => f.stage === ProcessingStage.COMPLETED && f.scrubbedText);
+
+    if (completedFiles.length === 0) {
+      alert('No processed files to compress. Please process some documents first.');
+      return;
+    }
+
+    setIsCompressing(true);
+    setCompressionProgress('Preparing documents...');
+
+    try {
+      console.log(`🗜️ Compressing ${completedFiles.length} documents...`);
+
+      // Convert ProcessedFile to ProcessedDocument format
+      const documents: ProcessedDocument[] = completedFiles.map(f => ({
+        id: f.id,
+        filename: f.originalName,
+        text: f.scrubbedText || '',
+        metadata: {
+          documentType: f.type,
+        }
+      }));
+
+      // Run compression with progress callback
+      const result = await runCompression(documents, {
+        ...defaultCompressionOptions,
+        maxOutputSizeKb: 100, // 100KB target
+      }, (progress) => {
+        setCompressionProgress(progress.message);
+      });
+
+      // Generate YAML
+      setCompressionProgress('Generating YAML output...');
+      const yaml = await generateYAMLFromResult(result.timeline, result.errors);
+
+      // Download YAML
+      const blob = new Blob([yaml], { type: 'text/yaml; charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Compressed_Timeline_${new Date().toISOString().split('T')[0]}.yaml`;
+      document.body.appendChild(a); // Append to body for better browser compatibility
+      a.click();
+      document.body.removeChild(a); // Clean up the element
+      setTimeout(() => URL.revokeObjectURL(url), 100); // Revoke after a short delay
+
+      console.log('✅ Timeline compressed successfully!');
+      console.log(`📊 Compression: ${result.timeline.compressionMetadata.originalSizeKb.toFixed(2)}KB → ${result.timeline.compressionMetadata.compressedSizeKb.toFixed(2)}KB (${(result.timeline.compressionMetadata.ratio * 100).toFixed(1)}%)`);
+      console.log(`📈 Events: ${result.timeline.compressionMetadata.eventsIncluded}/${result.timeline.compressionMetadata.eventsTotal} included`);
+
+      if (result.errors.hasErrors()) {
+        console.warn(`⚠️ ${result.errors.getAll().length} warnings collected during compression`);
+      }
+
+    } catch (error) {
+      console.error('Error compressing timeline:', error);
+      alert('Failed to compress timeline. Check console for details.');
+    } finally {
+      setIsCompressing(false);
+      setCompressionProgress('');
+    }
+  };
+
+  const completedCount = files.filter(f => f.stage === ProcessingStage.COMPLETED).length;
 
   return (
     <div className="min-h-screen bg-[#f0f0f0] font-sans text-zinc-900 pb-20 selection:bg-black selection:text-white">
@@ -200,8 +302,22 @@ const App: React.FC = () => {
              <div className="hidden md:flex flex-col text-right">
                 <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase">Status</span>
                 <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
-                  <span className="text-xs font-bold">SYSTEM_READY</span>
+                    {modelLoading ? (
+                        <>
+                            <RefreshCw className="w-3 h-3 animate-spin text-accent-600" />
+                            <span className="text-xs font-bold">LOADING_MODEL...</span>
+                        </>
+                    ) : modelError ? (
+                        <>
+                             <span className="w-2 h-2 bg-rose-500 rounded-full animate-pulse"></span>
+                             <span className="text-xs font-bold text-rose-600">MODEL_ERROR</span>
+                        </>
+                    ) : (
+                        <>
+                             <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
+                             <span className="text-xs font-bold">SYSTEM_READY</span>
+                        </>
+                    )}
                 </div>
              </div>
              
@@ -227,6 +343,34 @@ const App: React.FC = () => {
           </p>
         </div>
 
+        {/* Error Banner */}
+        {modelError && (
+          <div className="bg-rose-50 border-2 border-rose-600 p-6 mb-8 animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="flex items-start gap-3">
+              <ShieldAlert className="w-6 h-6 text-rose-600 shrink-0 mt-1" />
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-rose-900 mb-1 uppercase tracking-tight">
+                  ML Model Failed to Load
+                </h3>
+                <p className="text-sm font-mono text-rose-800 mb-3">
+                  {modelError}
+                </p>
+                <p className="text-xs text-rose-700 mb-3">
+                  The app will still work with regex-based PII detection, but ML-powered entity recognition (names, locations, organizations) will be unavailable.
+                </p>
+                <button
+                  onClick={handleRetryModelLoad}
+                  disabled={modelLoading}
+                  className="flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase bg-rose-600 text-white border-2 border-rose-800 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  <RefreshCw className={clsx("w-4 h-4", modelLoading && "animate-spin")} />
+                  Retry Model Load
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Action Area */}
         <DropZone onFilesDropped={handleFilesDropped} isProcessing={isProcessing} />
 
@@ -242,42 +386,68 @@ const App: React.FC = () => {
               Purge_Buffer
             </button>
 
-            <button
-              onClick={handleDownloadZip}
-              disabled={completedCount === 0}
-              className={clsx(
-                "flex items-center gap-2 px-6 py-3 font-bold uppercase tracking-wide border-2 border-black shadow-hard hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all",
-                completedCount > 0
-                  ? "bg-accent-600 text-white border-black"
-                  : "bg-zinc-200 text-zinc-400 border-zinc-300 shadow-none cursor-not-allowed"
-              )}
-            >
-              <Download className="w-4 h-4" />
-              Download Bundle ({completedCount})
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={handleGenerateTimeline}
+                disabled={completedCount === 0 || isGeneratingTimeline}
+                className={clsx(
+                  "flex items-center gap-2 px-6 py-3 font-bold uppercase tracking-wide border-2 shadow-hard hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all",
+                  completedCount > 0 && !isGeneratingTimeline
+                    ? "bg-emerald-600 text-white border-black"
+                    : "bg-zinc-200 text-zinc-400 border-zinc-300 shadow-none cursor-not-allowed"
+                )}
+              >
+                {isGeneratingTimeline ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Compiling...
+                  </>
+                ) : (
+                  <>
+                    <Calendar className="w-4 h-4" />
+                    Generate Timeline ({completedCount})
+                  </>
+                )}
+              </button>
 
-            <button
-              onClick={handleGenerateTimeline}
-              disabled={completedCount === 0 || isGeneratingTimeline}
-              className={clsx(
-                "flex items-center gap-2 px-6 py-3 font-bold uppercase tracking-wide border-2 shadow-hard hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all",
-                completedCount > 0 && !isGeneratingTimeline
-                  ? "bg-emerald-600 text-white border-black"
-                  : "bg-zinc-200 text-zinc-400 border-zinc-300 shadow-none cursor-not-allowed"
-              )}
-            >
-              {isGeneratingTimeline ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  Compiling...
-                </>
-              ) : (
-                <>
-                  <Calendar className="w-4 h-4" />
-                  Generate Timeline ({completedCount})
-                </>
-              )}
-            </button>
+              <button
+                onClick={handleCompressTimeline}
+                disabled={completedCount === 0 || isCompressing}
+                className={clsx(
+                  "flex items-center gap-2 px-6 py-3 font-bold uppercase tracking-wide border-2 shadow-hard hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all",
+                  completedCount > 0 && !isCompressing
+                    ? "bg-blue-600 text-white border-black"
+                    : "bg-zinc-200 text-zinc-400 border-zinc-300 shadow-none cursor-not-allowed"
+                )}
+                title={compressionProgress || "Compress timeline to YAML (LLM-optimized)"}
+              >
+                {isCompressing ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span className="text-xs">{compressionProgress || 'Compressing...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Minimize2 className="w-4 h-4" />
+                    Compress YAML ({completedCount})
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={handleDownloadZip}
+                disabled={completedCount === 0}
+                className={clsx(
+                  "flex items-center gap-2 px-6 py-3 font-bold uppercase tracking-wide border-2 border-black shadow-hard hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all",
+                  completedCount > 0
+                    ? "bg-accent-600 text-white border-black"
+                    : "bg-zinc-200 text-zinc-400 border-zinc-300 shadow-none cursor-not-allowed"
+                )}
+              >
+                <Download className="w-4 h-4" />
+                Download Bundle ({completedCount})
+              </button>
+            </div>
           </div>
         )}
 

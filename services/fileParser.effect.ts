@@ -588,10 +588,10 @@ class FileParserServiceImpl implements FileParserService {
 
       // Plain text files
       if (
-        fileType.startsWith("text/plain") ||
-        fileType.startsWith("text/csv") ||
-        fileType.startsWith("text/markdown") ||
-        fileType.startsWith("application/json") ||
+        fileType === "text/plain" ||
+        fileType === "text/csv" ||
+        fileType === "text/markdown" ||
+        fileType === "application/json" ||
         file.name.endsWith(".md") ||
         file.name.endsWith(".csv")
       ) {
