@@ -18,8 +18,8 @@
 
 import { Effect, Context, Layer, pipe } from "effect";
 import { pipeline, env } from "@huggingface/transformers";
-import { ScrubResult, PIIMap, ScrubResultSchema, decodeScrubResult } from "../schemas";
-import { AppError, MLModelError, PIIDetectionWarning, ErrorCollector } from "./errors";
+import { ScrubResult, PIIMap, decodeScrubResult } from "../schemas";
+import { MLModelError, PIIDetectionWarning, ErrorCollector } from "./errors";
 
 // Configure Hugging Face
 env.allowLocalModels = false;
@@ -109,7 +109,7 @@ function createMLModelService(): MLModelService {
   // Captured state (no `this` needed)
   let pipe: NERPipeline | null = null;
   let loadPromise: Promise<void> | null = null;
-  const segmenter: IntlSegmenter | undefined =
+  const _segmenter: IntlSegmenter | undefined =
     "Segmenter" in Intl
       ? new (Intl as unknown as { Segmenter: new (locale: string, options: { granularity: string }) => IntlSegmenter }).Segmenter("en", { granularity: "sentence" })
       : undefined;
@@ -179,7 +179,8 @@ function createMLModelService(): MLModelService {
 }
 
 // Helper for sentence segmentation (separate from ML service)
-function getSentences(text: string): string[] {
+// @internal Reserved for future chunking optimization
+function _getSentences(text: string): string[] {
   if ("Segmenter" in Intl) {
     const segmenter = new (Intl as unknown as { Segmenter: new (locale: string, options: { granularity: string }) => IntlSegmenter }).Segmenter("en", { granularity: "sentence" });
     return Array.from(segmenter.segment(text)).map((s) => s.segment);

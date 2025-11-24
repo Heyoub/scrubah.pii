@@ -1,12 +1,6 @@
 import { pipeline, env } from '@huggingface/transformers';
 import { ScrubResult, PIIMap } from '../types';
-import {
-  RawPHI,
-  ScrubbedText,
-  markAsScrubbed,
-  unsafeUnwrapPHI,
-  mightContainPII
-} from '../schemas/phi';
+import { markAsScrubbed, mightContainPII } from '../schemas/phi';
 
 // Configure to not search for local models, use CDN
 env.allowLocalModels = false;
@@ -302,7 +296,7 @@ class PiiScrubberService {
 
       // Run secondary validation pass even in regex-only mode
       // Note: secondaryValidationPass mutates globalReplacements in-place
-      const { text: validatedText, additionalCount } = this.secondaryValidationPass(
+      const { text: validatedText, additionalCount: _additionalCount } = this.secondaryValidationPass(
         finalScrubbedText,
         entityToPlaceholder,
         counters,
@@ -362,7 +356,7 @@ class PiiScrubberService {
       entities.sort((a: any, b: any) => a.start - b.start);
 
       for (const entity of entities) {
-        const { entity_group, word, start, end } = entity as any;
+        const { entity_group, word: _word, start, end } = entity as any;
         
         // Append text before entity
         scrubbedChunk += chunk.substring(chunkCursor, start);
@@ -393,13 +387,13 @@ class PiiScrubberService {
       finalScrubbedText += scrubbedChunk;
     }
 
-    const processingTime = ((performance.now() - startTime) / 1000).toFixed(2);
+    const _processingTime = ((performance.now() - startTime) / 1000).toFixed(2);
     console.log(`✅ Pass 1 (Primary) complete: ${totalReplacements} entities redacted`);
 
     // --- PHASE 4: SECONDARY VALIDATION PASS ---
     // Catch anything that slipped through with broader patterns
     console.log(`🔍 Running Pass 2 (Validation)...`);
-    const { text: validatedText, additionalReplacements, additionalCount } = this.secondaryValidationPass(
+    const { text: validatedText, additionalReplacements: _additionalReplacements, additionalCount } = this.secondaryValidationPass(
       finalScrubbedText,
       entityToPlaceholder,
       counters,

@@ -256,7 +256,7 @@ const detectClinicalContent = (text: string): Effect.Effect<{
  */
 const calculateGeneration = (
   filename: string,
-  text: string
+  _text: string  // Reserved for future date extraction from content
 ): Effect.Effect<number, never, never> => {
   return Effect.sync(() => {
     // Try to extract date from filename
@@ -386,7 +386,7 @@ export const calculateRelevanceScore = (
  */
 export const collectGarbage = (
   documents: ProcessedFile[],
-  minScore: number = 30
+  _minScore: number = 30  // Reserved for future configurable threshold
 ): Effect.Effect<{
   kept: ProcessedFile[];
   demoted: ProcessedFile[];

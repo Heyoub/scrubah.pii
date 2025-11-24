@@ -79,7 +79,7 @@ const parseImage = (file: File): Effect.Effect<ParseResult, OCRError, never> => 
           Tesseract.recognize(file, "eng", {
             logger: (m) => console.debug("OCR Progress:", m),
           }),
-        catch: (error) =>
+        catch: (_error) =>
           new OCRError({
             file: file.name,
             confidence: 0,
@@ -183,14 +183,14 @@ const parsePDFPage = (
         pipe(
           Effect.tryPromise({
             try: () => Tesseract.recognize(blob, "eng"),
-            catch: (error) =>
+            catch: (_error) =>
               new OCRError({
                 file: `pdf page ${pageNum}`,
                 confidence: 0,
                 suggestion: "OCR failed. Page may be blank or illegible.",
               }),
           }),
-          Effect.catchAll((error) => {
+          Effect.catchAll((_error) => {
             // On OCR failure, return placeholder
             return Effect.succeed({
               data: { text: `[OCR_FAILED_PAGE_${pageNum}]\n`, confidence: 0 },

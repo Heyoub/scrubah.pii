@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { piiScrubber } from './piiScrubber';
 import { PATTERNS } from './piiScrubber';
 import { TEST_PII } from './testConstants';
