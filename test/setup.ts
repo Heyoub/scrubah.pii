@@ -2,6 +2,17 @@ import { expect, afterEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
+// Configure HuggingFace Transformers for Node.js test environment
+// Must be done before any imports that use transformers
+import { env } from '@huggingface/transformers';
+
+// Disable browser cache - not available in Node.js
+env.useBrowserCache = false;
+// Allow remote models to be downloaded
+env.allowRemoteModels = true;
+// Use local file cache instead of browser cache
+env.cacheDir = './.cache/transformers';
+
 // Cleanup after each test
 afterEach(() => {
   cleanup();

@@ -1,5 +1,26 @@
 {
-  "name": "CleanSlate Health",
-  "description": "A secure, local-first medical document scrubber that removes PII using in-browser AI and prepares files for LLM workflows.",
+  "name": "Scrubah.PII",
+  "version": "1.0.0",
+  "description": "Forensic medical data sanitizer with zero-trust PII scrubbing, content-based deduplication, structured lab extraction, and LLM-optimized timeline generation. 100% local, WASM-powered, HIPAA-friendly.",
+  "author": "Heyoub (https://github.com/Heyoub)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Heyoub/scrubah-pii.git"
+  },
+  "keywords": [
+    "medical",
+    "pii",
+    "hipaa",
+    "deidentification",
+    "privacy",
+    "healthcare",
+    "nlp",
+    "ml",
+    "wasm",
+    "local-first",
+    "timeline",
+    "deduplication"
+  ],
   "requestFramePermissions": []
 }

@@ -16,10 +16,10 @@
  * 4. Result validation (Effect Schema)
  */
 
-import { Effect, Context, Layer, pipe, ParseResult } from "effect";
+import { Effect, Context, Layer, pipe } from "effect";
 import { pipeline, env } from "@huggingface/transformers";
 import { ScrubResult, PIIMap, ScrubResultSchema, decodeScrubResult } from "../schemas";
-import { AppError, MLModelError, PIIDetectionWarning, SchemaValidationError, ErrorCollector } from "./errors";
+import { AppError, MLModelError, PIIDetectionWarning, ErrorCollector } from "./errors";
 
 // Configure Hugging Face
 env.allowLocalModels = false;
@@ -27,6 +27,20 @@ env.useBrowserCache = true;
 
 const TARGET_ENTITIES = ["PER", "LOC", "ORG"] as const;
 type EntityType = (typeof TARGET_ENTITIES)[number];
+
+/**
+ * NER ENTITY TYPE (Explicit type for ML model output)
+ *
+ * Per Effect v3 best practices: NEVER use `any` - always explicit types
+ * This prevents TypeScript infinite inference with strict mode
+ */
+interface NEREntity {
+  readonly entity_group: string;
+  readonly word: string;
+  readonly start: number;
+  readonly end: number;
+  readonly score: number;
+}
 
 /**
  * PATTERNS (Regex for structural PII)
@@ -38,8 +52,6 @@ const PATTERNS = {
   DATE: /\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b/g,
   CREDIT_CARD: /\b(?:\d{4}[-\s]?){3}\d{4}\b/g,
   ZIPCODE: /\b\d{5}(?:-\d{4})?\b/g,
-  // Medical document header names (LASTNAME, FIRSTNAME format)
-  PATIENT_NAME: /^([A-Z]{2,}),\s+([A-Z]{2,})$/gm,
 } as const;
 
 const MRN_CONTEXT_KEYWORDS = [
@@ -63,20 +75,8 @@ const MRN_CONTEXT_KEYWORDS = [
  * end
  */
 export interface MLModelService {
-  readonly loadModel: Effect.Effect<void, MLModelError, never>;
-  readonly infer: (
-    text: string
-  ) => Effect.Effect<
-    Array<{
-      entity_group: string;
-      word: string;
-      start: number;
-      end: number;
-      score: number;
-    }>,
-    MLModelError,
-    never
-  >;
+  loadModel(): Effect.Effect<void, MLModelError, never>;
+  infer(text: string): Effect.Effect<ReadonlyArray<NEREntity>, MLModelError, never>;
 }
 
 export const MLModelService = Context.GenericTag<MLModelService>(
@@ -84,47 +84,55 @@ export const MLModelService = Context.GenericTag<MLModelService>(
 );
 
 /**
- * ML MODEL IMPLEMENTATION (Live service)
+ * ML MODEL IMPLEMENTATION (Factory pattern - avoids `this` inference issues)
  */
-class MLModelServiceImpl implements MLModelService {
-  private pipe: any = null;
-  private loadPromise: Promise<void> | null = null;
-  private segmenter?: any;
+/**
+ * Intl.Segmenter type (not in all TypeScript libs)
+ */
+interface IntlSegmenter {
+  segment(text: string): Iterable<{ segment: string }>;
+}
 
-  constructor() {
-    if ("Segmenter" in Intl) {
-      this.segmenter = new (Intl as any).Segmenter("en", {
-        granularity: "sentence",
-      });
-    }
-  }
+/**
+ * ML Model Pipeline type (from transformers.js)
+ */
+type NERPipeline = (
+  text: string,
+  options: { aggregation_strategy: string; ignore_labels: string[] }
+) => Promise<NEREntity[]>;
 
-  readonly loadModel = Effect.gen(this, function* (_) {
-    // If already loaded, return immediately
-    if (this.pipe) return;
+/**
+ * Factory function creates MLModelService without `this` inference issues
+ * This pattern avoids TypeScript strict mode stack overflow
+ */
+function createMLModelService(): MLModelService {
+  // Captured state (no `this` needed)
+  let pipe: NERPipeline | null = null;
+  let loadPromise: Promise<void> | null = null;
+  const segmenter: IntlSegmenter | undefined =
+    "Segmenter" in Intl
+      ? new (Intl as unknown as { Segmenter: new (locale: string, options: { granularity: string }) => IntlSegmenter }).Segmenter("en", { granularity: "sentence" })
+      : undefined;
 
-    // If currently loading, wait for promise
-    if (this.loadPromise) {
-      yield* _(Effect.promise(() => this.loadPromise!));
-      return;
-    }
+  const loadModel = (): Effect.Effect<void, MLModelError, never> => {
+    return Effect.suspend(() => {
+      if (pipe) return Effect.void;
+      if (loadPromise) return Effect.promise(() => loadPromise!);
 
-    // Start loading
-    this.loadPromise = (async () => {
-      try {
-        this.pipe = await pipeline("token-classification", "Xenova/bert-base-NER", {
-          quantized: true,
-        } as any);
-        console.log("✅ NER Model loaded successfully");
-      } catch (err) {
-        this.loadPromise = null;
-        throw err;
-      }
-    })();
+      loadPromise = (async () => {
+        try {
+          pipe = await pipeline("token-classification", "Xenova/bert-base-NER", {
+            quantized: true,
+          } as Parameters<typeof pipeline>[2]) as unknown as NERPipeline;
+          console.log("✅ NER Model loaded successfully");
+        } catch (err) {
+          loadPromise = null;
+          throw err;
+        }
+      })();
 
-    yield* _(
-      Effect.tryPromise({
-        try: () => this.loadPromise!,
+      return Effect.tryPromise({
+        try: () => loadPromise!,
         catch: (error) =>
           new MLModelError({
             modelName: "Xenova/bert-base-NER",
@@ -132,77 +140,66 @@ class MLModelServiceImpl implements MLModelService {
             fallbackUsed: false,
             suggestion: "Check network connection and retry",
           }),
-      })
-    );
-  });
-
-  readonly infer = (text: string) =>
-    Effect.gen(this, function* (_) {
-      // Ensure model is loaded
-      if (!this.pipe) {
-        yield* _(this.loadModel);
-      }
-
-      // Run inference with timeout
-      const result = yield* _(
-        Effect.tryPromise({
-          try: () =>
-            Promise.race([
-              this.pipe(text, {
-                aggregation_strategy: "simple",
-                ignore_labels: ["O"],
-              }),
-              new Promise((_, reject) =>
-                setTimeout(() => reject(new Error("Processing timeout")), 30000)
-              ),
-            ]),
-          catch: (error) =>
-            new MLModelError({
-              modelName: "Xenova/bert-base-NER",
-              reason: error instanceof Error ? error.message : String(error),
-              fallbackUsed: false,
-              suggestion: "Try reducing text size or check model availability",
-            }),
-        })
-      );
-
-      return result as Array<{
-        entity_group: string;
-        word: string;
-        start: number;
-        end: number;
-        score: number;
-      }>;
+      });
     });
+  };
 
-  getSentences(text: string): string[] {
-    if (this.segmenter) {
-      return Array.from((this.segmenter as any).segment(text)).map(
-        (s: any) => s.segment
+  const infer = (text: string): Effect.Effect<ReadonlyArray<NEREntity>, MLModelError, never> => {
+    return Effect.suspend(() => {
+      const loadFirst = pipe ? Effect.void : loadModel();
+
+      return loadFirst.pipe(
+        Effect.flatMap(() =>
+          Effect.tryPromise({
+            try: () =>
+              Promise.race([
+                pipe!(text, {
+                  aggregation_strategy: "simple",
+                  ignore_labels: ["O"],
+                }),
+                new Promise<NEREntity[]>((_, reject) =>
+                  setTimeout(() => reject(new Error("Processing timeout")), 30000)
+                ),
+              ]),
+            catch: (error) =>
+              new MLModelError({
+                modelName: "Xenova/bert-base-NER",
+                reason: error instanceof Error ? error.message : String(error),
+                fallbackUsed: false,
+                suggestion: "Try reducing text size or check model availability",
+              }),
+          })
+        ),
+        Effect.map((result) => result as ReadonlyArray<NEREntity>)
       );
-    }
-    return text.match(/[^.!?]+[.!?]+]*/g) || [text];
+    });
+  };
+
+  return { loadModel, infer };
+}
+
+// Helper for sentence segmentation (separate from ML service)
+function getSentences(text: string): string[] {
+  if ("Segmenter" in Intl) {
+    const segmenter = new (Intl as unknown as { Segmenter: new (locale: string, options: { granularity: string }) => IntlSegmenter }).Segmenter("en", { granularity: "sentence" });
+    return Array.from(segmenter.segment(text)).map((s) => s.segment);
   }
+  return text.match(/[^.!?]+[.!?]+]*/g) || [text];
 }
 
 /**
  * ML MODEL LAYER (for Effect runtime)
- */
-export const MLModelServiceLive = Layer.succeed(
-  MLModelService,
-  new MLModelServiceImpl()
-);
-
-/**
- * HELPER: Extract field name from ParseError for debugging
  *
- * This helps identify which schema field failed validation
+ * EXPLICIT TYPE ANNOTATION per Effect v3 best practices:
+ * Layer.Layer<Out, Error, In>
+ * - Out: MLModelService (what this layer provides)
+ * - Error: never (no errors during layer creation)
+ * - In: never (no dependencies)
  */
-const extractFieldFromParseError = (error: ParseResult.ParseError): string => {
-  // Simplified version - just return "validation_error"
-  // The full error details are logged via ArrayFormatter below
-  return "validation_error";
-};
+export const MLModelServiceLive: Layer.Layer<MLModelService, never, never> = Layer.succeed(
+  MLModelService,
+  createMLModelService()
+);
 
 /**
  * CONTEXT-AWARE MRN DETECTION
@@ -289,7 +286,6 @@ const regexPrePass = (text: string): ScrubState => {
     }
   };
 
-  runRegex("PER", PATTERNS.PATIENT_NAME, "NAME");
   runRegex("EMAIL", PATTERNS.EMAIL, "EMAIL");
   runRegex("PHONE", PATTERNS.PHONE, "PHONE");
   runRegex("ID", PATTERNS.SSN, "SSN");
@@ -318,14 +314,14 @@ const regexPrePass = (text: string): ScrubState => {
  * PHASE 2: SMART CHUNKING
  */
 const smartChunk = (text: string, maxChunkSize = 2000): string[] => {
-  // Use sentence segmenter if available
-  const segmenter =
+  // Use sentence segmenter if available - explicit type casting
+  const segmenter: IntlSegmenter | null =
     "Segmenter" in Intl
-      ? new (Intl as any).Segmenter("en", { granularity: "sentence" })
+      ? new (Intl as unknown as { Segmenter: new (locale: string, options: { granularity: string }) => IntlSegmenter }).Segmenter("en", { granularity: "sentence" })
       : null;
 
-  const sentences = segmenter
-    ? Array.from((segmenter as any).segment(text)).map((s: any) => s.segment)
+  const sentences: string[] = segmenter
+    ? Array.from(segmenter.segment(text)).map((s) => s.segment)
     : text.match(/[^.!?]+[.!?]+]*/g) || [text];
 
   const chunks: string[] = [];
@@ -354,70 +350,62 @@ const mlInference = (
   state: ScrubState,
   errorCollector: ErrorCollector
 ): Effect.Effect<ScrubState, never, MLModelService> => {
-  return pipe(
-    Effect.gen(function* (_) {
-      const mlModel = yield* _(MLModelService);
-      let finalText = "";
-      const replacements: Record<string, string> = { ...state.replacements };
-      const counters: Record<string, number> = { ...state.counters };
-      const entityToPlaceholder: Record<string, string> = Object.fromEntries(
-        Object.entries(replacements).map(([k, v]) => [k, v])
+  return Effect.gen(function* (_) {
+    const mlModel = yield* _(MLModelService);
+    let finalText = "";
+    const replacements: Record<string, string> = { ...state.replacements };
+    const counters: Record<string, number> = { ...state.counters };
+    const entityToPlaceholder: Record<string, string> = Object.fromEntries(
+      Object.entries(replacements).map(([k, v]) => [k, v])
+    );
+
+    console.log(`🔍 Processing ${chunks.length} chunks for PII detection...`);
+    const startTime = performance.now();
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+
+      // Progress indicator
+      if (chunks.length > 10 && i % 5 === 0) {
+        console.log(
+          `⏳ Progress: ${i}/${chunks.length} chunks (${Math.round((i / chunks.length) * 100)}%)`
+        );
+      }
+
+      // Skip empty chunks
+      if (!chunk.trim()) {
+        finalText += chunk;
+        continue;
+      }
+
+      // Skip chunks that are only placeholders
+      if (/^(\s*\[[A-Z_]+\d+\]\s*)+$/.test(chunk)) {
+        finalText += chunk;
+        continue;
+      }
+
+      // Run ML inference (with error handling)
+      const entitiesResult = yield* _(
+        pipe(
+          mlModel.infer(chunk),
+          Effect.catchAll((error) => {
+            // On ML failure, use regex-only (graceful degradation)
+            errorCollector.add(error);
+            return Effect.succeed([]);
+          })
+        )
       );
 
-      console.log(`🔍 Processing ${chunks.length} chunks for PII detection...`);
-      const startTime = performance.now();
-
-      for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
-
-        // Progress indicator
-        if (chunks.length > 10 && i % 5 === 0) {
-          console.log(
-            `⏳ Progress: ${i}/${chunks.length} chunks (${Math.round((i / chunks.length) * 100)}%)`
-          );
-        }
-
-        // Skip empty chunks
-        if (!chunk.trim()) {
-          finalText += chunk;
-          continue;
-        }
-
-        // Skip chunks that are only placeholders
-        if (/^(\s*\[[A-Z_]+\d+\]\s*)+$/.test(chunk)) {
-          finalText += chunk;
-          continue;
-        }
-
-        // Run ML inference (with error handling) - annotate each chunk with span
-        const entitiesResult = yield* _(
-          pipe(
-            mlModel.infer(chunk),
-            Effect.catchAll((error) => {
-              // On ML failure, use regex-only (graceful degradation)
-              errorCollector.add(error);
-              return Effect.succeed([]);
-            }),
-            Effect.withSpan("ml-inference.chunk", {
-              attributes: {
-                chunkIndex: i,
-                chunkLength: chunk.length,
-                totalChunks: chunks.length
-              }
-            })
-          )
-        );
-
-      // Filter entities - use LOWER threshold for medical PII (err on side of caution)
-      const entities = entitiesResult.filter(
-        (e: any) =>
-          TARGET_ENTITIES.includes(e.entity_group as EntityType) && e.score > 0.50
+      // Filter high-confidence entities - explicit NEREntity type
+      const entities: NEREntity[] = entitiesResult.filter(
+        (e: NEREntity) =>
+          TARGET_ENTITIES.includes(e.entity_group as EntityType) && e.score > 0.85
       );
 
       // Warn on low-confidence detections
       entitiesResult
-        .filter((e: any) => e.score <= 0.50 && e.score > 0.3)
-        .forEach((e: any) => {
+        .filter((e: NEREntity) => e.score <= 0.85 && e.score > 0.5)
+        .forEach((e: NEREntity) => {
           errorCollector.add(
             new PIIDetectionWarning({
               entity: e.word,
@@ -431,14 +419,14 @@ const mlInference = (
           );
         });
 
-      // Sort by start index
-      entities.sort((a: any, b: any) => a.start - b.start);
+      // Sort by start index - explicit types prevent inference issues
+      entities.sort((a: NEREntity, b: NEREntity) => a.start - b.start);
 
       let chunkCursor = 0;
       let scrubbedChunk = "";
 
       for (const entity of entities) {
-        const { entity_group, start, end } = entity as any;
+        const { entity_group, start, end } = entity;
 
         scrubbedChunk += chunk.substring(chunkCursor, start);
         const originalText = chunk.substring(start, end);
@@ -464,21 +452,14 @@ const mlInference = (
       finalText += scrubbedChunk;
     }
 
-      const processingTime = ((performance.now() - startTime) / 1000).toFixed(2);
-      const count = Object.keys(replacements).length;
-      console.log(
-        `✅ PII scrubbing complete in ${processingTime}s (${count} entities redacted)`
-      );
+    const processingTime = ((performance.now() - startTime) / 1000).toFixed(2);
+    const count = Object.keys(replacements).length;
+    console.log(
+      `✅ PII scrubbing complete in ${processingTime}s (${count} entities redacted)`
+    );
 
-      return { text: finalText, replacements, counters };
-    }),
-    // Wrap all chunk processing in parent span
-    Effect.withSpan("ml-inference.all-chunks", {
-      attributes: {
-        totalChunks: chunks.length
-      }
-    })
-  );
+    return { text: finalText, replacements, counters };
+  });
 };
 
 /**
@@ -494,121 +475,46 @@ export const scrubPII = (
   never,
   MLModelService
 > => {
-  return pipe(
-    Effect.gen(function* (_) {
-      const errorCollector = new ErrorCollector();
+  return Effect.gen(function* (_) {
+    const errorCollector = new ErrorCollector();
 
-      // Phase 1: Regex pre-pass (pure) - annotate with span
-      const afterRegex = yield* _(
-        Effect.sync(() => regexPrePass(text)),
-        Effect.withSpan("pii-scrubber.regex-prepass", {
-          attributes: {
-            textLength: text.length,
-            phase: "regex-prepass"
-          }
+    // Phase 1: Regex pre-pass (pure)
+    const afterRegex = regexPrePass(text);
+
+    // Phase 2: Smart chunking (pure)
+    const chunks = smartChunk(afterRegex.text);
+
+    // Phase 3: ML inference (Effect)
+    const finalState = yield* _(mlInference(chunks, afterRegex, errorCollector));
+
+    // Build result
+    const result: ScrubResult = {
+      text: finalState.text,
+      replacements: finalState.replacements,
+      count: Object.keys(finalState.replacements).length,
+    };
+
+    // Validate with Effect Schema
+    const validated = yield* _(
+      pipe(
+        decodeScrubResult(result),
+        Effect.catchAll((error) => {
+          // Schema validation failed - this shouldn't happen, but log it
+          console.error("Schema validation failed:", error);
+          return Effect.succeed(result);
         })
-      );
+      )
+    );
 
-      // Phase 2: Smart chunking (pure) - annotate with span
-      const chunks = yield* _(
-        Effect.sync(() => smartChunk(afterRegex.text)),
-        Effect.withSpan("pii-scrubber.chunking", {
-          attributes: {
-            textLength: afterRegex.text.length,
-            chunkCount: 0,
-            phase: "chunking"
-          }
-        })
-      );
-
-      // Phase 3: ML inference (Effect) - annotate with span
-      const finalState = yield* _(
-        mlInference(chunks, afterRegex, errorCollector),
-        Effect.withSpan("pii-scrubber.ml-inference", {
-          attributes: {
-            chunkCount: chunks.length,
-            phase: "ml-inference"
-          }
-        })
-      );
-
-      // Build result
-      const result: ScrubResult = {
-        text: finalState.text,
-        replacements: finalState.replacements,
-        count: Object.keys(finalState.replacements).length,
-      };
-
-      // Phase 4: Validate with Effect Schema (strict - no fallback!) - annotate with span
-      const validated = yield* _(
-        pipe(
-          decodeScrubResult(result),
-          Effect.mapError((parseError) => {
-            // Log validation failure
-            console.error("=== SCHEMA VALIDATION FAILED ===");
-            console.error("Parse error:", parseError);
-
-            // Create structured error for error collector
-            const schemaError = new SchemaValidationError({
-              schema: "ScrubResult",
-              field: extractFieldFromParseError(parseError),
-              expected: "Valid ScrubResult with count === replacements.length",
-              actual: JSON.stringify(result, null, 2),
-              suggestion: "Check PII scrubber logic - invariant violation detected",
-            });
-
-            // Add to error collector for visibility
-            errorCollector.add(schemaError);
-
-            // Return the error to propagate it
-            return schemaError;
-          }),
-          // If validation fails, we want to know! Don't silently succeed.
-          Effect.catchTag("SchemaValidationError", (error) => {
-            // Log but continue with best-effort result
-            console.warn("⚠️  Continuing with potentially invalid result due to schema error");
-            return Effect.succeed(result as ScrubResult);
-          }),
-          Effect.withSpan("pii-scrubber.validation", {
-            attributes: {
-              resultCount: result.count,
-              replacementsSize: Object.keys(result.replacements).length,
-              phase: "validation"
-            }
-          })
-        )
-      );
-
-      return { result: validated, errors: errorCollector };
-    }),
-    // Wrap entire pipeline in parent span for full execution tracing
-    Effect.withSpan("pii-scrubber.pipeline", {
-      attributes: {
-        inputLength: text.length
-      }
-    })
-  );
+    return { result: validated, errors: errorCollector };
+  });
 };
 
 /**
  * HELPER: Run scrubber (for easy migration from Promise-based code)
  */
 export const runScrubPII = async (text: string): Promise<ScrubResult> => {
-  const program = pipe(
-    scrubPII(text),
-    Effect.provide(MLModelServiceLive),
-    // Enable span logging and error cause tracking for debugging
-    Effect.tapDefect((defect) => {
-      console.error("=== EFFECT DEFECT (UNHANDLED ERROR) ===");
-      console.error(defect);
-      return Effect.void;
-    }),
-    Effect.tapErrorCause((cause) => {
-      console.error("=== EFFECT ERROR CAUSE ===");
-      console.error(cause);
-      return Effect.void;
-    })
-  );
+  const program = pipe(scrubPII(text), Effect.provide(MLModelServiceLive));
 
   const { result, errors } = await Effect.runPromise(program);
 
