@@ -31,4 +31,6 @@ export interface ScrubResult {
   text: string;
   replacements: PIIMap;
   count: number;
+  /** Confidence score (0-100) from multi-pass validation */
+  confidence?: number;
 }

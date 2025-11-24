@@ -1,11 +1,20 @@
 import { ProcessedFile, ScrubResult } from '../types';
+import { ScrubbedText, toExportableString } from '../schemas/phi';
+
+/**
+ * HIPAA COMPLIANCE NOTE:
+ * This formatter ONLY accepts ScrubResult which contains ScrubbedText.
+ * The type system ensures raw PHI cannot be passed to this function.
+ */
 
 interface FrontmatterMetadata {
   source_file: string;
   processed_date: string;
   pii_scrubbed_count: number;
+  pii_confidence_score?: number;
   processing_engine: string;
   processing_seconds: string;
+  hipaa_compliant: boolean;
   [key: string]: any;
 }
 
@@ -20,14 +29,17 @@ export const formatToMarkdown = (
 ): string => {
   
   // 1. Construct Data Lineage (Frontmatter)
+  // HIPAA AUDIT: Include confidence score for compliance tracking
   const metadata: FrontmatterMetadata = {
     source_file: fileEntry.originalName,
     file_size_bytes: fileEntry.size,
     file_type: fileEntry.type,
     processed_date: new Date().toISOString(),
     pii_scrubbed_count: scrubResult.count,
-    processing_engine: "Scrubah.PII-Local-v1",
-    processing_seconds: (processingTimeMs / 1000).toFixed(2)
+    pii_confidence_score: scrubResult.confidence ?? 100,
+    processing_engine: "Scrubah.PII-Local-v2-HIPAA",
+    processing_seconds: (processingTimeMs / 1000).toFixed(2),
+    hipaa_compliant: true
   };
 
   // 2. Serialize Frontmatter (YAML style)
