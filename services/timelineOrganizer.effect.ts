@@ -524,7 +524,7 @@ export const buildMasterTimeline = (
       );
       const labData =
         fingerprint.documentType === DocumentType.LAB_REPORT
-          ? extractLabResults(file.scrubbedText, date.toLocaleDateString())
+          ? extractLabResults(file.scrubbedText, date.toLocaleDateString()) ?? undefined
           : undefined;
 
       const doc = createTimelineDocument(

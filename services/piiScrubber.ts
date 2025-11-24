@@ -451,7 +451,7 @@ class PiiScrubberService {
       let currentMatch;
       // Reset lastIndex for exec loop
       regex.lastIndex = 0;
-      const replacements = [];
+      const replacements: { start: number; end: number; placeholder: string }[] = [];
       while ((currentMatch = regex.exec(validatedText)) !== null) {
         const match = currentMatch[0];
         if (isPlaceholder(match) || isWhitelisted(match)) continue;
