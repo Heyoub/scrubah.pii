@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
 import { parseFile } from './fileParser';
 
 // Mock external dependencies
@@ -18,6 +18,10 @@ vi.mock('tesseract.js', () => ({
     recognize: vi.fn(),
   },
 }));
+
+// Helper to get mock function (vi.mocked not available in Bun)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const asMock = (fn: any): Mock => fn as Mock;
 
 describe('File Parser - Text Files', () => {
   it('should parse plain text files', async () => {
@@ -78,7 +82,7 @@ describe('File Parser - DOCX Files', () => {
     const mammoth = await import('mammoth');
     const mockHtml = '<h1>Title</h1><p>Content here</p>';
 
-    vi.mocked(mammoth.default.convertToHtml).mockResolvedValue({
+    asMock(mammoth.default.convertToHtml).mockResolvedValue({
       value: mockHtml,
       messages: [],
     });
@@ -101,7 +105,7 @@ describe('File Parser - DOCX Files', () => {
   it('should handle DOCX parsing errors gracefully', async () => {
     const mammoth = await import('mammoth');
 
-    vi.mocked(mammoth.default.convertToHtml).mockRejectedValue(
+    asMock(mammoth.default.convertToHtml).mockRejectedValue(
       new Error('Failed to parse DOCX')
     );
 
@@ -128,7 +132,7 @@ describe('File Parser - Image Files (OCR)', () => {
       },
     };
 
-    vi.mocked(Tesseract.default.recognize).mockResolvedValue(mockOcrResult as any);
+    asMock(Tesseract.default.recognize).mockResolvedValue(mockOcrResult as any);
 
     const buffer = new ArrayBuffer(100);
     const file = new File([buffer], 'scan.png', { type: 'image/png' });
@@ -151,7 +155,7 @@ describe('File Parser - Image Files (OCR)', () => {
       data: { text: 'Text from JPEG' },
     };
 
-    vi.mocked(Tesseract.default.recognize).mockResolvedValue(mockOcrResult as any);
+    asMock(Tesseract.default.recognize).mockResolvedValue(mockOcrResult as any);
 
     const imageFormats = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
 
@@ -167,7 +171,7 @@ describe('File Parser - Image Files (OCR)', () => {
   it('should handle OCR errors gracefully', async () => {
     const Tesseract = await import('tesseract.js');
 
-    vi.mocked(Tesseract.default.recognize).mockRejectedValue(
+    asMock(Tesseract.default.recognize).mockRejectedValue(
       new Error('OCR failed')
     );
 
