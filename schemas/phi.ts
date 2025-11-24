@@ -102,6 +102,98 @@ export function unsafeUnwrapPHI(phi: RawPHI): string {
 }
 
 // ============================================================================
+// SPECIFIC PLACEHOLDER TYPES (Typed Constructors)
+// ============================================================================
+
+/** Known placeholder types for type-safe creation */
+export const PlaceholderType = {
+  PERSON: 'PER',
+  PHONE: 'PHONE',
+  EMAIL: 'EMAIL',
+  SSN: 'SSN',
+  ZIP: 'ZIP',
+  DATE: 'DATE',
+  ADDRESS: 'ADDR',
+  LOCATION: 'LOC',
+  ORGANIZATION: 'ORG',
+  MRN: 'MRN',
+  CARD: 'CARD',
+} as const;
+
+export type PlaceholderTypeKey = keyof typeof PlaceholderType;
+export type PlaceholderTypeValue = typeof PlaceholderType[PlaceholderTypeKey];
+
+/**
+ * Create a typed placeholder - safer than raw string construction
+ */
+export function makeTypedPlaceholder(
+  type: PlaceholderTypeValue,
+  index: number
+): PIIPlaceholder {
+  if (index < 1) throw new Error('Placeholder index must be >= 1');
+  return `[${type}_${index}]` as PIIPlaceholder;
+}
+
+// ============================================================================
+// TYPE GUARDS (For Type Narrowing)
+// ============================================================================
+
+/**
+ * Type guard: Check if a string is a valid placeholder format
+ */
+export function isPlaceholder(text: string): text is PIIPlaceholder {
+  return /^\[[A-Z_]+_\d+\]$/.test(text);
+}
+
+/**
+ * Type guard: Validate that text appears fully scrubbed (no obvious PII)
+ * Returns ScrubbedText if valid, throws if suspicious PII detected
+ */
+export function assertScrubbed(text: string): ScrubbedText {
+  if (mightContainPII(text)) {
+    const suspiciousPatterns = [
+      { name: 'phone', pattern: /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/ },
+      { name: 'ssn', pattern: /\b\d{3}-\d{2}-\d{4}\b/ },
+      { name: 'email', pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/ },
+    ];
+    for (const { name, pattern } of suspiciousPatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        throw new Error(
+          `HIPAA VIOLATION: Text contains suspicious ${name} pattern: "${match[0].substring(0, 20)}..."`
+        );
+      }
+    }
+  }
+  return text as ScrubbedText;
+}
+
+// ============================================================================
+// SCRUB RESULT CONSTRUCTORS
+// ============================================================================
+
+/**
+ * Create a validated scrub result with confidence score
+ */
+export interface TypedScrubResult {
+  readonly text: ScrubbedText;
+  readonly placeholderCount: number;
+  readonly confidenceScore: number; // 0-100
+}
+
+export function createScrubResult(
+  scrubbedText: string,
+  placeholderCount: number,
+  confidenceScore: number
+): TypedScrubResult {
+  return {
+    text: markAsScrubbed(scrubbedText),
+    placeholderCount,
+    confidenceScore: Math.max(0, Math.min(100, confidenceScore)),
+  };
+}
+
+// ============================================================================
 // EXTRACTION UTILITIES
 // ============================================================================
 
