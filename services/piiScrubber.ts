@@ -67,25 +67,41 @@ const NAME_LABELS = [
 const detectLabeledName = (text: string): { start: number; end: number; value: string }[] => {
   const matches: { start: number; end: number; value: string }[] = [];
 
+  // Sort labels by length (longest first) to prevent partial matches
+  // e.g., "Patient Name" should match before "Patient"
+  const sortedLabels = [...NAME_LABELS].sort((a, b) => b.length - a.length);
+
   // Look for names with labels (e.g., "Patient Name: John Smith", "Name: Mary Johnson")
-  // Matches: Title + FirstName + LastName (and optional Middle)
-  const contextPattern = new RegExp(
-    `(${NAME_LABELS.join('|')})[:\\s]+(?:(Dr|Mr|Ms|Mrs|Miss)\\.?\\s+)?([A-Z][a-z]+(?:\\s+[A-Z][a-z]+){1,3})`,
+  // Two-part approach: case-insensitive label, case-SENSITIVE name
+  // This prevents false positives like "patient was examined" from matching
+  const labelPattern = new RegExp(
+    `(${sortedLabels.join('|')})\\s*:\\s*`,
     'gi'
   );
 
-  let match;
-  while ((match = contextPattern.exec(text)) !== null) {
-    // Extract the full name (including title if present)
-    const nameValue = match[2] ? `${match[2]} ${match[3]}` : match[3];
-    const nameStartOffset = match[0].indexOf(nameValue);
-    const start = match.index + nameStartOffset;
+  let labelMatch;
+  while ((labelMatch = labelPattern.exec(text)) !== null) {
+    const afterLabel = text.slice(labelMatch.index + labelMatch[0].length);
 
-    matches.push({
-      start,
-      end: start + nameValue.length,
-      value: nameValue
-    });
+    // Name pattern (CASE SENSITIVE) - requires proper capitalization
+    // Optional title (Dr., Mr., Ms., Mrs., Miss) followed by capitalized name parts
+    const namePattern = /^((?:Dr|Mr|Ms|Mrs|Miss)\.?\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/;
+    const nameMatch = afterLabel.match(namePattern);
+
+    if (nameMatch) {
+      // Reconstruct full name with title (preserve period if present)
+      const title = nameMatch[1]?.trim() || '';
+      const name = nameMatch[2];
+      const fullName = title ? `${title} ${name}` : name;
+
+      const start = labelMatch.index + labelMatch[0].length;
+
+      matches.push({
+        start,
+        end: start + fullName.length,
+        value: fullName
+      });
+    }
   }
 
   return matches;
