@@ -1,5 +1,12 @@
 import { pipeline, env } from '@huggingface/transformers';
 import { ScrubResult, PIIMap } from '../types';
+import {
+  RawPHI,
+  ScrubbedText,
+  markAsScrubbed,
+  unsafeUnwrapPHI,
+  mightContainPII
+} from '../schemas/phi';
 
 // Configure to not search for local models, use CDN
 env.allowLocalModels = false;
@@ -369,10 +376,20 @@ class PiiScrubberService {
     console.log(`✅ All passes complete in ${totalProcessingTime}s`);
     console.log(`📊 Total: ${totalSecondPassReplacements} entities | Confidence: ${validation.confidenceScore.toFixed(1)}%`);
 
+    // HIPAA COMPLIANCE: Mark output as scrubbed (type-safe)
+    // This is the ONLY place ScrubbedText can be created
+    const scrubbedOutput = markAsScrubbed(validatedText);
+
+    // Runtime sanity check in development
+    if (process.env.NODE_ENV === 'development' && mightContainPII(validatedText)) {
+      console.warn('⚠️ PHI LEAK WARNING: Scrubbed output may still contain PII patterns');
+    }
+
     return {
-      text: validatedText,
+      text: scrubbedOutput as unknown as string, // Cast for backwards compatibility
       replacements: globalReplacements,
-      count: totalSecondPassReplacements
+      count: totalSecondPassReplacements,
+      confidence: validation.confidenceScore
     };
   }
 
