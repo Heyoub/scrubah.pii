@@ -454,69 +454,70 @@ export const compressTimeline = (
 
     // Zero-trust guardrail: compression must never see raw PHI
     const safeDocuments = (() => {
-      const unsafeDocs = [];
+      if (!Array.isArray(documents)) {
+        throw new CompressionError({
+          message: "Invalid input: documents must be an array",
+          extra: { actualType: typeof documents },
+        });
+      }
+
+      type Violation = { file: string; message: string };
+      const unsafeDocs: Violation[] = [];
+
       for (const doc of documents) {
         try {
           assertScrubbed(doc.text);
         } catch (error) {
+          const violationMessage =
+            error instanceof Error ? error.message : "unsafe text";
           unsafeDocs.push({
             file: doc.filename,
-            message: error instanceof Error ? error.message : "unsafe text",
+            message: violationMessage,
           });
-          errorCollector.add(new ParseError({
-            file: doc.filename,
-            field: "text",
-            expected: "ScrubbedText with placeholders (PII removed)",
-            actual: error instanceof Error ? error.message : "unsafe text",
-            suggestion: "Unscrubbed input detected. Aborting compression to prevent PHI leakage.",
-            extra: { reason: "PHI_POLICY_VIOLATION_UNSCRUBBED" }
-          }));
+          errorCollector.add(
+            new ParseError({
+              file: doc.filename,
+              field: "text",
+              expected: "ScrubbedText with placeholders (PII removed)",
+              actual: "unscrubbed input",
+              suggestion:
+                "Unscrubbed input detected. Aborting compression to prevent PHI leakage.",
+              extra: { reason: "PHI_POLICY_VIOLATION_UNSCRUBBED" },
+            })
+          );
         }
       }
+
       if (unsafeDocs.length > 0) {
         throw new CompressionError({
           message: "Aborting: one or more documents are not scrubbed",
-          extra: { violations: unsafeDocs }
+          extra: { violations: unsafeDocs },
         });
       }
+
       return documents;
     })();
-
-    // The rest of the function should use `safeDocuments` instead of `documents`.
-    // For example, the first use is in STAGE 1:
-    // const allEvents = yield* _(
-    //   Effect.all(
-    //     safeDocuments.map((doc, i) =>
-    //       Effect.succeed(doc).pipe(
-    //         Effect.flatMap((d) => extractEventsFromDocument(d, errorCollector)),
-    //         Effect.tap(() => progressCallback?.({ stage: "extracting", current: i + 1, total: safeDocuments.length }))
-    //       )
-    //     ),
-    //     { concurrency: "inherit" }
-    //   )
-    // );
-    // ... and so on for other usages of `documents`.
 
     // STAGE 1: Extract events
     progressCallback?.({
       stage: "extracting",
       current: 0,
-      total: documents.length,
+      total: safeDocuments.length,
       message: "Extracting timeline events...",
     });
 
     const allEvents: TimelineEntry[] = [];
-    for (let i = 0; i < documents.length; i++) {
+    for (let i = 0; i < safeDocuments.length; i++) {
       const events = yield* _(
-        extractEventsFromDocument(documents[i], errorCollector)
+        extractEventsFromDocument(safeDocuments[i], errorCollector)
       );
       allEvents.push(...events);
 
       progressCallback?.({
         stage: "extracting",
         current: i + 1,
-        total: documents.length,
-        message: `Extracted ${allEvents.length} events from ${i + 1}/${documents.length} documents`,
+        total: safeDocuments.length,
+        message: `Extracted ${allEvents.length} events from ${i + 1}/${safeDocuments.length} documents`,
       });
     }
 
@@ -582,7 +583,7 @@ export const compressTimeline = (
     const timeline = yield* _(
       buildCompressedTimeline(
         compressed,
-        documents,
+        safeDocuments,
         originalEventsCount,
         options
       )
