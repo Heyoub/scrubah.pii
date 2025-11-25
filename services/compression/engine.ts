@@ -464,6 +464,9 @@ export const compressTimeline = (
           expected: "ScrubbedText with placeholders (PII removed)",
           actual: error instanceof Error ? error.message : "unsafe text",
           suggestion: "A document was not scrubbed correctly and was skipped. This is likely an internal error.",
+          // Mark specifically as PHI policy violation for downstream handling
+          // Consumers of ErrorCollector can branch on this flag.
+          extra: { reason: "PHI_POLICY_VIOLATION_UNSCRUBBED" }
         }));
         return false;
       }
