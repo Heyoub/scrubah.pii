@@ -217,9 +217,7 @@ db.version(2).stores({
 
 ---
 
-## 📈 Performance Optimizations for Your Hardware
-
-Since you have an older i7 + GTX 1060:
+## 📈 Performance
 
 ### Content Hashing is Fast
 
@@ -278,10 +276,10 @@ A **frontier LLM does the exact same thing** when given this format.
 
 ## 🚀 Next Steps
 
-1. **Test with current data**: Run your existing 142 PDFs through the timeline generator
+1. **Test with sample data**: Run documents through the timeline generator
 2. **Verify deduplication**: Check how many duplicates are detected
-3. **Review lab extraction**: See if the regex patterns catch your specific lab formats
-4. **Iterate on patterns**: Add custom patterns for your specific EHR system
+3. **Review lab extraction**: See if the regex patterns catch your lab formats
+4. **Iterate on patterns**: Add custom patterns for your EHR system
 
 ---
 
