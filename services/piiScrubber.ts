@@ -26,17 +26,32 @@ const PATTERNS = {
   EMAIL: /\b[\w\.-]+@[\w\.-]+\.\w{2,4}\b/g,
   PHONE: /(?:\+?1[-. ]?)?\(?([0-9]{3})\)?[-. ]?([0-9]{3})[-. ]?([0-9]{4})/g,
   SSN: /\b\d{3}-\d{2}-\d{4}\b/g,
+  SSN_PARTIAL: /\b(?:last\s*4|xxx-xx-)\s*[-:]?\s*\d{4}\b/gi, // "last 4: 1234" or "xxx-xx-1234"
   DATE: /\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b/g,
+  // Written-out dates: "March 15, 2024", "15 March 2024", "March 2024"
+  DATE_WRITTEN: /\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?\b/gi,
+  DATE_WRITTEN_ALT: /\b\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?(?:January|February|March|April|May|June|July|August|September|October|November|December)(?:,?\s+\d{4})?\b/gi,
   CREDIT_CARD: /\b(?:\d{4}[-\s]?){3}\d{4}\b/g,
   ZIPCODE: /\b\d{5}(?:-\d{4})?\b/g,
+  // Age patterns (HIPAA PHI when combined with other info)
+  AGE: /\b\d{1,3}\s*(?:year[s]?\s*old|y\.?o\.?|yo|yr[s]?(?:\s*old)?)\b/gi,
+  AGE_CONTEXT: /\b(?:age[d]?|DOB\s+indicates)\s*[:\s]*\d{1,3}\b/gi,
   // Address patterns
   ADDRESS: /\d+\s+(?:[A-Za-z]+\s+){1,4}(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr|Court|Ct|Parkway|Pkwy|Way|Circle|Cir|Place|Pl|Terrace|Ter)(?:\.|\s|,|\s+Apt|\s+Suite|\s+Unit|\s+#)?(?:\s*[A-Za-z0-9#-]*)?/gi,
   CITY_STATE: /\b[A-Z][a-zA-Z\s]+,\s*[A-Z]{2}\b/g,
   PO_BOX: /P\.?\s*O\.?\s*Box\s+\d+/gi,
   // ALL CAPS names: "DOE, JANE" or "JOHN SMITH" (2+ consecutive uppercase words)
   ALL_CAPS_NAME: /\b[A-Z]{2,}(?:,?\s+[A-Z]{2,})+\b/g,
+  // Single ALL CAPS word (likely a name in medical context) - min 3 chars to avoid acronyms
+  ALL_CAPS_SINGLE: /\b[A-Z]{3,}\b/g,
   // LAST, FIRST format (Title Case): "Smith, John" or "Van Der Berg, Maria"
-  LAST_FIRST_NAME: /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g
+  LAST_FIRST_NAME: /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g,
+  // Names with apostrophes/hyphens: "O'Brien", "Mary-Jane", "McDonald"
+  NAME_APOSTROPHE: /\b(?:O'|Mc|Mac)?[A-Z][a-z]+(?:[-'][A-Z]?[a-z]+)+\b/g,
+  // Names with suffixes: "John Smith Jr.", "Robert Williams III"
+  NAME_WITH_SUFFIX: /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\s+(?:Jr\.?|Sr\.?|II|III|IV|V)\b/g,
+  // Insurance/Policy ID patterns
+  INSURANCE_ID: /\b(?:policy|member|subscriber|group|insurance)\s*(?:#|number|id|no)?[:\s]*[A-Z0-9]{6,15}\b/gi
 };
 
 // Context-aware MRN detector
@@ -203,6 +218,30 @@ const WHITELIST_TERMS = new Set([
   'United', 'States', 'America', 'North', 'South', 'East', 'West', 'Central'
 ]);
 
+// ALL CAPS terms that are NOT names (medical acronyms, common terms)
+const WHITELIST_ACRONYMS = new Set([
+  // Medical acronyms
+  'CBC', 'MRI', 'CAT', 'EKG', 'ECG', 'EEG', 'EMG', 'ICU', 'CCU', 'NICU', 'PICU', 'ER', 'OR', 'ED',
+  'HIV', 'AIDS', 'COVID', 'COPD', 'CHF', 'CAD', 'GERD', 'UTI', 'DVT', 'PE', 'MI', 'CVA', 'TIA',
+  'BMI', 'BP', 'HR', 'RR', 'SPO', 'BUN', 'WBC', 'RBC', 'HGB', 'HCT', 'PLT', 'BMP', 'CMP', 'LFT',
+  'TSH', 'PSA', 'HBA', 'INR', 'PTT', 'ABG', 'VBG', 'CSF', 'EGD', 'ERCP', 'PET', 'CT', 'US',
+  'PRN', 'BID', 'TID', 'QID', 'QHS', 'QAM', 'QPM', 'PO', 'IV', 'IM', 'SQ', 'SL', 'PR', 'TOP',
+  'DNR', 'DNI', 'POLST', 'HCP', 'POA', 'LTC', 'SNF', 'ALF', 'ICD', 'CPT', 'DRG', 'ICD', 'HCPCS',
+  'STAT', 'ASAP', 'WNL', 'NAD', 'PERRLA', 'ROS', 'HPI', 'PMH', 'PSH', 'FH', 'SH', 'RX', 'DX', 'TX',
+  'SOB', 'DOE', 'PND', 'JVD', 'RUQ', 'LUQ', 'RLQ', 'LLQ', 'CVA', 'ROM', 'DTR', 'CN', 'EOM',
+  'AMA', 'ADA', 'HIPAA', 'PHI', 'EMR', 'EHR', 'CMS', 'FDA', 'CDC', 'NIH', 'WHO',
+  // Common document terms
+  'PDF', 'DOC', 'PAGE', 'DATE', 'TIME', 'NOTE', 'NOTES', 'FORM', 'REPORT', 'SUMMARY', 'HISTORY',
+  'NAME', 'AGE', 'SEX', 'DOB', 'MRN', 'SSN', 'ZIP', 'FAX', 'TEL', 'EXT',
+  'MALE', 'FEMALE', 'YES', 'NO', 'NA', 'N/A', 'TBD', 'NKA', 'NKDA',
+  // Section headers
+  'SUBJECTIVE', 'OBJECTIVE', 'ASSESSMENT', 'PLAN', 'SOAP', 'IMPRESSION', 'RECOMMENDATION',
+  'CHIEF', 'COMPLAINT', 'ALLERGIES', 'MEDICATIONS', 'VITALS', 'EXAM', 'LABS', 'IMAGING',
+  'PROCEDURE', 'PROCEDURES', 'SURGERY', 'SURGERIES', 'DIAGNOSIS', 'DIAGNOSES',
+  // Other common acronyms
+  'USA', 'UK', 'EST', 'PST', 'CST', 'MST', 'UTC', 'GMT', 'AM', 'PM'
+]);
+
 interface ValidationResult {
   foundSuspiciousPII: boolean;
   suspiciousMatches: string[];
@@ -217,6 +256,7 @@ export {
   PATTERNS,
   VALIDATION_PATTERNS,
   WHITELIST_TERMS,
+  WHITELIST_ACRONYMS,
   MRN_CONTEXT_KEYWORDS,
   NAME_LABELS,
   US_STATES
@@ -309,9 +349,17 @@ class PiiScrubberService {
     runRegex('EMAIL', PATTERNS.EMAIL, 'EMAIL');
     runRegex('PHONE', PATTERNS.PHONE, 'PHONE');
     runRegex('ID', PATTERNS.SSN, 'SSN');
+    runRegex('ID', PATTERNS.SSN_PARTIAL, 'SSN');
     runRegex('ID', PATTERNS.CREDIT_CARD, 'CARD');
     runRegex('ID', PATTERNS.ZIPCODE, 'ZIP');
+    runRegex('ID', PATTERNS.INSURANCE_ID, 'ID');
     runRegex('DATE', PATTERNS.DATE, 'DATE');
+    runRegex('DATE', PATTERNS.DATE_WRITTEN, 'DATE');
+    runRegex('DATE', PATTERNS.DATE_WRITTEN_ALT, 'DATE');
+
+    // Age patterns (HIPAA PHI)
+    runRegex('DATE', PATTERNS.AGE, 'AGE');
+    runRegex('DATE', PATTERNS.AGE_CONTEXT, 'AGE');
 
     // Address patterns - run BEFORE city/state to catch full addresses
     runRegex('LOC', PATTERNS.ADDRESS, 'ADDR');
@@ -321,6 +369,26 @@ class PiiScrubberService {
     // Name patterns - catch ALL CAPS and LAST, FIRST formats
     runRegex('PER', PATTERNS.ALL_CAPS_NAME, 'PER');
     runRegex('PER', PATTERNS.LAST_FIRST_NAME, 'PER');
+    runRegex('PER', PATTERNS.NAME_APOSTROPHE, 'PER');
+    runRegex('PER', PATTERNS.NAME_WITH_SUFFIX, 'PER');
+
+    // Single ALL CAPS words (potential names) - with whitelist check
+    const allCapsSinglePattern = PATTERNS.ALL_CAPS_SINGLE;
+    interimText = interimText.replace(allCapsSinglePattern, (match) => {
+      // Skip if it's a known acronym/medical term
+      if (WHITELIST_ACRONYMS.has(match)) return match;
+      // Skip if already a placeholder
+      if (/^\[[A-Z_]+\d+\]$/.test(match)) return match;
+
+      if (!entityToPlaceholder[match]) {
+        counters.PER++;
+        const placeholder = `[PER_${counters.PER}]`;
+        entityToPlaceholder[match] = placeholder;
+        globalReplacements[match] = placeholder;
+        totalReplacements++;
+      }
+      return entityToPlaceholder[match];
+    });
 
     // Standalone state abbreviation detection (after addresses to avoid double-matching)
     const stateMatches = detectStandaloneStates(interimText);
