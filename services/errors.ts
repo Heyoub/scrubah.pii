@@ -167,6 +167,72 @@ export class TimelineError extends Data.TaggedError("TimelineError")<{
 }
 
 /**
+ * MISSING DATE ERROR - Date not found in filename or content
+ *
+ * Used when document date cannot be determined
+ */
+export class MissingDateError extends Data.TaggedError("MissingDateError")<{
+  readonly documentId: string;
+  readonly eventType: string;
+  readonly suggestion: string;
+}> {
+  get recoverable(): boolean {
+    return true; // Can use current date as fallback
+  }
+
+  get message(): string {
+    return `Missing date for document: ${this.documentId}`;
+  }
+
+  toJSON() {
+    return {
+      _tag: this._tag,
+      message: this.message,
+      documentId: this.documentId,
+      eventType: this.eventType,
+      suggestion: this.suggestion,
+      recoverable: this.recoverable,
+      timestamp: new Date().toISOString(),
+    };
+  }
+}
+
+/**
+ * TIMELINE CONFLICT ERROR - Documents conflict in timeline
+ *
+ * Used when duplicate or same-event documents are detected
+ */
+export class TimelineConflictError extends Data.TaggedError("TimelineConflictError")<{
+  readonly event1Id: string;
+  readonly event2Id: string;
+  readonly reason: string;
+  readonly resolution: string;
+  readonly suggestion: string;
+}> {
+  get recoverable(): boolean {
+    return true; // Can still include both documents with note
+  }
+
+  get message(): string {
+    return `Timeline conflict between ${this.event1Id} and ${this.event2Id}: ${this.reason}`;
+  }
+
+  toJSON() {
+    return {
+      _tag: this._tag,
+      message: this.message,
+      event1Id: this.event1Id,
+      event2Id: this.event2Id,
+      reason: this.reason,
+      resolution: this.resolution,
+      suggestion: this.suggestion,
+      recoverable: this.recoverable,
+      timestamp: new Date().toISOString(),
+    };
+  }
+}
+
+/**
  * Union of all service errors (for type safety)
  */
 export type ServiceError =
@@ -175,7 +241,9 @@ export type ServiceError =
   | PIIDetectionWarning
   | FingerprintError
   | LabExtractionError
-  | TimelineError;
+  | TimelineError
+  | MissingDateError
+  | TimelineConflictError;
 
 /**
  * Error Collector (for accumulating multiple errors during processing)
@@ -191,6 +259,10 @@ export class ErrorCollector {
 
   getAll(): ServiceError[] {
     return [...this.errors];
+  }
+
+  count(): number {
+    return this.errors.length;
   }
 
   hasErrors(): boolean {
