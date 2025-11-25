@@ -21,7 +21,7 @@ import { piiScrubber } from './services/piiScrubber';
 import { formatToMarkdown } from './services/markdownFormatter';
 import { buildMasterTimeline } from './services/timelineOrganizer';
 import { db } from './services/db';
-import { ProcessedFile, ProcessingStage } from './types';
+import { ProcessedFile, ProcessingStage } from './schemas';
 
 const App: React.FC = () => {
   const [files, setFiles] = useState<ProcessedFile[]>([]);

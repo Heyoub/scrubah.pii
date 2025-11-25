@@ -17,7 +17,7 @@ import {
 } from '../schemas';
 import { analyzeDuplication, generateFingerprint } from './contentHasher';
 import { extractLabResults, formatLabTable, generateTrendAnalysis } from './labExtractor';
-import { ProcessedFile } from '../types';
+import { ProcessedFile } from '../schemas';
 
 // Re-export for backward compatibility
 export type {
