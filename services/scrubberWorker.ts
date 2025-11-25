@@ -6,7 +6,7 @@
  */
 
 import type { AuditReport } from './auditCollector';
-import type { ScrubResponse, ProgressUpdate, ErrorResponse } from './scrubber.worker';
+import type { WorkerResponse } from './scrubber.worker';
 
 export interface WorkerScrubResult {
   text: string;
@@ -19,8 +19,6 @@ export interface WorkerScrubOptions {
   filename?: string;
   onProgress?: (stage: string, percent: number) => void;
 }
-
-type WorkerResponseMessage = ScrubResponse | ProgressUpdate | ErrorResponse;
 
 class ScrubberWorkerManager {
   private worker: Worker | null = null;
@@ -47,7 +45,7 @@ class ScrubberWorkerManager {
         { type: 'module' }
       );
 
-      this.worker.onmessage = (event: MessageEvent<WorkerResponseMessage>) => {
+      this.worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
         this.handleMessage(event.data);
       };
 
@@ -67,7 +65,7 @@ class ScrubberWorkerManager {
     }
   }
 
-  private handleMessage(msg: WorkerResponseMessage): void {
+  private handleMessage(msg: WorkerResponse): void {
     const job = this.pendingJobs.get(msg.jobId);
     if (!job) return;
 
