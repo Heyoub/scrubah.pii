@@ -261,7 +261,7 @@ function scrubText(
   // Labeled name detection
   const sortedLabels = [...NAME_LABELS].sort((a, b) => b.length - a.length);
   const labelPattern = new RegExp(`(${sortedLabels.join('|')})\\s*:\\s*`, 'gi');
-  const labeledNameMatches: Array<{ original: string; placeholder: string }> = [];
+  const labeledNameMatches: Array<{ original: string; placeholder: string; start: number }> = [];
   let labelMatch;
 
   while ((labelMatch = labelPattern.exec(interimText)) !== null) {
@@ -297,7 +297,7 @@ function scrubText(
   labeledNameMatches.sort((a, b) => b.start - a.start).forEach(({ original, placeholder, start }) => {
     interimText = interimText.substring(0, start) + placeholder + interimText.substring(start + original.length);
   });
-  audit.log('PER', 'LABELED_NAME', labeledNameMatches);
+  audit.log('PER', 'LABELED_NAME', labeledNameMatches.map(({ original, placeholder }) => ({ original, placeholder })));
 
   // Progress: 100%
   postProgress({ type: 'progress', jobId, stage: 'Finalizing...', percent: 100 });
