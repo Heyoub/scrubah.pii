@@ -91,7 +91,7 @@ export class AuditCollector {
   /**
    * Generate summary statistics
    */
-  getSummary(confidenceScore: number, scrubbedText: string): AuditSummary {
+  getSummary(confidenceScore: number, _scrubbedText: string): AuditSummary {
     const byCategory: Record<string, number> = {};
     let totalDetections = 0;
     let totalDuration = 0;

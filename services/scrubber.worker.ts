@@ -110,7 +110,7 @@ export interface ErrorResponse {
 }
 
 type WorkerMessage = ScrubRequest;
-type WorkerResponse = ScrubResponse | ProgressUpdate | ErrorResponse;
+type _WorkerResponse = ScrubResponse | ProgressUpdate | ErrorResponse;
 
 // ============================================================================
 // SCRUBBING LOGIC
