@@ -1,5 +1,5 @@
 import { pipeline, env } from '@huggingface/transformers';
-import { ScrubResult, PIIMap } from '../schemas';
+import { ScrubResult, MutablePIIMap } from '../schemas';
 import { markAsScrubbed, mightContainPII } from '../schemas/phi';
 
 // Configure to not search for local models, use CDN
@@ -320,7 +320,7 @@ class PiiScrubberService {
     // Only load ML model if not in regex-only mode
     if (!regexOnly && !this.pipe) await this.loadModel();
 
-    const globalReplacements: PIIMap = {};
+    const globalReplacements: MutablePIIMap = {};
     let totalReplacements = 0;
 
     // Context consistency map
@@ -616,10 +616,10 @@ class PiiScrubberService {
     text: string,
     entityToPlaceholder: Record<string, string>,
     counters: EntityCounters,
-    globalReplacements: PIIMap
-  ): { text: string; additionalReplacements: PIIMap; additionalCount: number } {
+    globalReplacements: MutablePIIMap
+  ): { text: string; additionalReplacements: MutablePIIMap; additionalCount: number } {
     let validatedText = text;
-    const additionalReplacements: PIIMap = {};
+    const additionalReplacements: MutablePIIMap = {};
     let additionalCount = 0;
 
     // Helper function to check if text is already a placeholder
