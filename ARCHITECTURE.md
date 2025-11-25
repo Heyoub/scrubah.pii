@@ -23,6 +23,27 @@ Last Updated: November 2025 (Phase 4-5 Implementation)
 
 ## Philosophy & Design Principles
 
+### 0. **Dual-Pipeline Architecture**
+
+Scrubah.PII uses two complementary approaches for PII safety:
+
+**Pipeline 1: Blacklist (PII Scrubbing)** - `services/piiScrubber.effect.ts`
+- **Approach**: Detect and remove PII using patterns + ML
+- **Method**: Regex (EMAIL, PHONE, SSN) + BERT NER (names, locations, orgs)
+- **Output**: Scrubbed text with `[REDACTED]` placeholders
+- **Risk**: Edge cases can slip through (e.g., concatenated text: "SMITH,JOHN01/15/1980")
+
+**Pipeline 2: Whitelist (Clinical Extraction)** - `services/whitelist/`
+- **Approach**: Extract only validated medical data
+- **Method**: Structured parsing of lab values, diagnoses, medications, imaging findings
+- **Output**: Clean JSON/markdown with only clinical terminology
+- **Safety**: PII never enters extraction pipeline (safer by design)
+
+**Why Both?**
+- Blacklist: General-purpose scrubbing for unstructured text
+- Whitelist: Safer for structured medical data where false negatives are unacceptable
+- Combined: Defense-in-depth for HIPAA compliance
+
 ### 1. **Railway-Oriented Programming**
 
 Errors are values, not exceptions. Every operation returns `Effect<Success, Error, Requirements>`.
@@ -108,30 +129,42 @@ const file = decodeProcessedFile(untrustedData);
 
 ```shell
 scrubah.pii/
-├── schemas.ts                    # SINGLE SOURCE OF TRUTH - All types with runtime validation
 ├── schemas/
+│   ├── index.ts                  # SINGLE SOURCE OF TRUTH - All types with runtime validation
 │   └── phi.ts                    # PHI branded types (RawPHI, ScrubbedText)
+│
 ├── services/
 │   ├── errors.ts                 # All error types (Data.TaggedError)
 │   ├── runtime.ts                # Effect runtime configuration
 │   │
-│   ├── *.effect.ts               # Effect-TS services (NEW ARCHITECTURE)
-│   │   ├── piiScrubber.effect.ts
-│   │   ├── fileParser.effect.ts
-│   │   ├── contentHasher.effect.ts
-│   │   ├── labExtractor.effect.ts
-│   │   ├── markdownFormatter.effect.ts
-│   │   └── timelineOrganizer.effect.ts
+│   │   ┌──────────────────────────────────────────────────┐
+│   │   │  PIPELINE 1: Blacklist (PII Scrubbing)           │
+│   │   └──────────────────────────────────────────────────┘
+│   ├── piiScrubber.effect.ts     # Regex + ML PII detection
+│   ├── fileParser.effect.ts      # PDF/DOCX/Image parsing
+│   ├── contentHasher.effect.ts   # Deduplication
+│   ├── labExtractor.effect.ts    # Lab value extraction (legacy blacklist)
+│   ├── markdownFormatter.effect.ts
+│   └── timelineOrganizer.effect.ts
 │   │
-│   └── *.ts                      # Legacy services (maintained for compatibility)
-│       ├── piiScrubber.ts
-│       ├── fileParser.ts
-│       └── ...
+│   │   ┌──────────────────────────────────────────────────┐
+│   │   │  PIPELINE 2: Whitelist (Clinical Extraction)     │
+│   │   └──────────────────────────────────────────────────┘
+│   └── whitelist/
+│       ├── schemas/              # Whitelist-specific schemas
+│       │   ├── medicalData.ts    # MedicalData, LabPanel, etc.
+│       │   └── timeline.ts       # Timeline output schemas
+│       └── services/
+│           ├── medicalExtractor.effect.ts   # Extract structured medical data
+│           ├── timelineFormatter.effect.ts  # Format PII-free timeline
+│           └── extractionPipeline.effect.ts # Full whitelist pipeline
 │
 ├── components/                   # React UI components
-├── tests/
+├── test/
 │   ├── schemas.test.ts           # Schema validation tests (51 tests)
-│   └── pii-leak.test.ts          # PII leak detection tests (36 tests)
+│   ├── pii-leak.test.ts          # PII leak detection tests (36 tests)
+│   ├── piiScrubber.integration.test.ts  # Blacklist integration tests
+│   └── whiteListExtractor.test.ts       # Whitelist extraction tests
 └── docs/
     ├── ARCHITECTURE.md           # This file
     ├── IMPLEMENTATION_PLAN.md    # Migration history
@@ -201,7 +234,7 @@ export const ScrubResultSchema = pipe(
 All schemas have comprehensive tests in `schemas.test.ts`:
 
 ```bash
-npm test schemas.test.ts
+pnpm test schemas.test.ts
 # ✓ schemas.test.ts (51 tests) 41ms
 ```
 
@@ -483,7 +516,7 @@ sendToAPI(rawPHI);  // ❌ Type error: RawPHI is not assignable to ScrubbedText
 8. **Regression Tests**: Known past bugs
 
 ```bash
-npm test pii-leak.test.ts
+pnpm test pii-leak.test.ts
 # Note: Requires browser environment for ML model
 # In Node.js, tests document expected behavior but can't execute
 ```
@@ -492,16 +525,16 @@ npm test pii-leak.test.ts
 
 ```bash
 # All tests
-npm test
+pnpm test
 
 # Specific test file
-npm test schemas.test.ts
+pnpm test schemas.test.ts
 
 # Watch mode
-npm run test:watch
+pnpm run test:watch
 
 # Coverage
-npm run test:coverage
+pnpm run test:coverage
 ```
 
 ---

@@ -16,14 +16,22 @@ Sanitize medical documents locally in your browser. Generate LLM-optimized timel
 
 ## 🎯 What It Does
 
-Scrubah.PII transforms messy medical records into clean, LLM-ready datasets:
+Scrubah.PII transforms messy medical records into clean, LLM-ready datasets using a **dual-pipeline architecture**:
 
-1. **PII Scrubbing**: Removes names, dates, IDs, contact info using hybrid regex + ML approach
-2. **Document Parsing**: Handles PDFs (including scanned/OCR), DOCX, images, text files
-3. **Deduplication**: Content-based detection (not filename) with 95% similarity threshold
-4. **Lab Extraction**: Converts prose lab reports → token-efficient markdown tables
-5. **Timeline Generation**: Chronologically sorted medical history with cross-references
-6. **100% Local**: All processing happens in-browser using WebAssembly ML models
+### Blacklist Pipeline (PII Scrubbing)
+1. **Regex Detection**: Structural PII patterns (email, phone, SSN, MRN, dates)
+2. **ML Detection**: Named entities (names, locations, organizations) via BERT NER
+3. **Placeholder Generation**: Consistent redaction across all documents
+
+### Whitelist Pipeline (Clinical Extraction)
+1. **Structured Extraction**: Lab values, imaging findings, pathology results
+2. **Safe-by-Design**: Only extracts validated medical data, PII excluded by design
+3. **Timeline Format**: Clean markdown tables optimized for LLM consumption
+
+### Additional Features
+- **Document Parsing**: PDFs (digital + OCR), DOCX, images, text files
+- **Deduplication**: Content-based detection with 95% similarity threshold
+- **100% Local**: All processing in-browser using WebAssembly ML models
 
 **Perfect for**: Healthcare researchers, clinical data analysts, AI medical applications, HIPAA-compliant workflows
 
@@ -38,12 +46,19 @@ Scrubah.PII transforms messy medical records into clean, LLM-ready datasets:
 - **IndexedDB storage** - Data never leaves your machine
 - **Open source** - Audit the code yourself
 
-### 🧠 Hybrid PII Detection
+### 🧠 Dual-Pipeline PII Safety
 
+**Blacklist Approach (PII Scrubbing)**:
 - **Regex patterns**: Email, phone, SSN, credit cards, MRN (with context awareness)
-- **ML entity recognition**: Names (PER), locations (LOC), organizations (ORG)
+- **ML entity recognition**: Names (PER), locations (LOC), organizations (ORG) via BERT NER
 - **Confidence scoring**: 85%+ threshold to reduce false positives
 - **Placeholder consistency**: Same entity → same placeholder across documents
+
+**Whitelist Approach (Clinical Extraction)** - *New in v2.0*:
+- **Structured data only**: Lab values, diagnoses, imaging findings, medications
+- **PII-free by design**: Names/identifiers never enter extraction pipeline
+- **Safe clinical output**: Only validated medical terminology in results
+- **Why safer**: Concatenated PII (e.g., "SMITH,JOHN01/15/1980") bypasses regex but won't appear in extracted lab values
 
 ### 📊 Intelligent Timeline Compilation
 
@@ -66,16 +81,24 @@ Scrubah.PII transforms messy medical records into clean, LLM-ready datasets:
 ## 🏗️ Architecture
 
 ```shell
-┌─────────────────────────────────────────────────────┐
-│                   Browser (Client)                   │
-├─────────────────────────────────────────────────────┤
-│  React UI  →  File Upload  →  Processing Pipeline   │
-│     ↓              ↓                    ↓            │
-│  Parser    →  PII Scrubber  →  Timeline Generator   │
-│  (PDF.js)     (Transformers.js)   (Content Hasher)  │
-│     ↓              ↓                    ↓            │
-│  Dexie     →   IndexedDB    →    Markdown Export    │
-└─────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│                      Browser (Client)                              │
+├───────────────────────────────────────────────────────────────────┤
+│  React UI  →  File Upload  →  Dual Processing Pipeline            │
+│     ↓              ↓                                               │
+│  Parser    →  ┌─────────────────────────────────────┐            │
+│  (PDF.js)     │  PIPELINE 1: Blacklist (Scrubbing)  │            │
+│     ↓         │  Regex + BERT NER → Placeholders    │            │
+│               └─────────────────────────────────────┘            │
+│     ↓                        ↓                                    │
+│               ┌─────────────────────────────────────┐            │
+│               │  PIPELINE 2: Whitelist (Extraction) │            │
+│               │  Structured Medical Data Only       │            │
+│               └─────────────────────────────────────┘            │
+│     ↓              ↓                    ↓                         │
+│  Dexie     →   IndexedDB    →    Timeline Generator              │
+│                                  (Content Hasher + Markdown)      │
+└───────────────────────────────────────────────────────────────────┘
 ```
 
 **Stack:**
@@ -104,10 +127,10 @@ git clone https://github.com/Heyoub/scrubah-pii.git
 cd scrubah-pii
 
 # Install dependencies
-npm install
+pnpm install
 
 # Start development server
-npm start
+pnpm start
 ```
 
 Open <http://localhost:3501/> (or check console for port)
@@ -174,16 +197,16 @@ graph TD
 
 ```bash
 # Run all tests
-npm test
+pnpm test
 
 # Run with UI
-npm run test:ui
+pnpm run test:ui
 
 # Run with coverage
-npm run test:coverage
+pnpm run test:coverage
 
 # Type checking
-npm run build  # Runs tsc + vite build
+pnpm run build  # Runs tsc + vite build
 ```
 
 **Test Coverage:**
@@ -231,44 +254,66 @@ const entities = output.filter(e => e.score > 0.85);  // Adjust here
 
 ### Core Services
 
-#### `parseFile(file: File): Promise<string>`
+#### Pipeline 1: Blacklist (PII Scrubbing)
+
+##### `parseFile(file: File): Promise<string>`
 
 Parses various file formats into plain text.
 
-**Supported Formats:**
+**Supported Formats:** PDF (digital + OCR), DOCX, Images, Text files
 
-- PDF (digital text + OCR for scanned pages)
-- DOCX (with table support)
-- Images (PNG, JPG, WEBP via Tesseract OCR)
-- Text (TXT, CSV, MD, JSON)
+##### `runScrubPII(text: string): Promise<ScrubResult>`
 
-#### `piiScrubber.scrub(text: string): Promise<ScrubResult>`
-
-Removes PII using hybrid regex + ML approach.
+Removes PII using hybrid regex + ML approach (Effect-TS).
 
 **Returns:**
 
 ```typescript
 interface ScrubResult {
-  text: string;              // Scrubbed content
+  text: ScrubbedText;       // Branded type (type-safe)
   replacements: PIIMap;      // Original → Placeholder mapping
   count: number;             // Total entities replaced
 }
 ```
 
-#### `buildMasterTimeline(files: ProcessedFile[]): Promise<MasterTimeline>`
+#### Pipeline 2: Whitelist (Clinical Extraction)
 
-Generates chronological medical timeline with deduplication.
+##### `extractMedicalData(doc: Document): Effect<MedicalData, ValidationError, never>`
+
+Extracts only structured clinical data (PII-free by design).
 
 **Returns:**
 
 ```typescript
-interface MasterTimeline {
-  documents: TimelineDocument[];
-  summary: TimelineSummary;
-  markdown: string;
+interface MedicalData {
+  documentType: "lab_report" | "imaging" | "pathology" | "clinical_note";
+  labPanels: LabPanel[];           // Structured lab results
+  imagingFindings: ImagingResult[]; // Radiology findings
+  pathology: PathologyResult[];     // Pathology diagnoses
+  diagnoses: Diagnosis[];           // Clinical diagnoses
+  medications: Medication[];        // Medication lists
+  // PII never enters this structure
 }
 ```
+
+##### `runExtractionPipeline(docs: Document[]): Effect<Timeline, ValidationError, never>`
+
+Generates PII-free medical timeline from structured extractions.
+
+**Returns:**
+
+```typescript
+interface Timeline {
+  markdown: string;              // Clean clinical timeline
+  extraction: ExtractionStats;   // Success/failure counts
+}
+```
+
+#### Legacy Services
+
+##### `buildMasterTimeline(files: ProcessedFile[]): Promise<MasterTimeline>`
+
+*Legacy blacklist-only timeline generator. Use whitelist pipeline for safer output.*
 
 ---
 
@@ -305,7 +350,7 @@ Contributions welcome! Please:
 - Follow existing code style (TypeScript strict mode)
 - Add tests for new features
 - Update documentation
-- Run `npm run build` before committing (type checks)
+- Run `pnpm run build` before committing (type checks)
 
 ---
 

@@ -47,7 +47,7 @@ interface NEREntity {
  * PATTERNS (Regex for structural PII)
  */
 const PATTERNS = {
-  EMAIL: /\b[\w\.-]+@[\w\.-]+\.\w{2,4}\b/g,
+  EMAIL: /\b[\w\.-]+@[\w\.-]+\.\w{2,}\b/g,
   PHONE: /(?:\+?1[-. ]?)?\(?([0-9]{3})\)?[-. ]?([0-9]{3})[-. ]?([0-9]{4})/g,
   SSN: /\b\d{3}-\d{2}-\d{4}\b/g,
   DATE: /\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b/g,
@@ -502,6 +502,15 @@ export const scrubPII = (
 
     return { result, errors: errorCollector };
   });
+};
+
+/**
+ * HELPER: Load ML model eagerly (for UI loading states)
+ */
+export const loadModel = async (): Promise<void> => {
+  const mlModel = createMLModelService();
+  const program = mlModel.loadModel();
+  await Effect.runPromise(program);
 };
 
 /**
