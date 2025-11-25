@@ -22,3 +22,20 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Test coverage
+coverage/
+.nyc_output/
+*.lcov
+
+# Build artifacts
+*.map
+build/
+
+# Test artifacts
+.stryker-tmp/
+
+# Environment files
+.env
+.env.local
+.env.*.local
