@@ -61,12 +61,13 @@ import {
 
 /**
  * Helper to test schema validation
+ * Uses type assertion to work with Effect Schema v3 Context parameter
  */
 const expectValid = async <A, I>(
-  schema: S.Schema<A, I>,
+  schema: S.Schema<A, I, any>,
   input: I
 ): Promise<A> => {
-  const result = S.decodeUnknownEither(schema)(input);
+  const result = S.decodeUnknownEither(schema as S.Schema<A, I, never>)(input);
   if (result._tag === 'Left') {
     throw new Error(`Expected valid, but got error: ${JSON.stringify(result.left)}`);
   }
@@ -75,12 +76,13 @@ const expectValid = async <A, I>(
 
 /**
  * Helper to test schema rejection
+ * Uses type assertion to work with Effect Schema v3 Context parameter
  */
 const expectInvalid = async <A, I>(
-  schema: S.Schema<A, I>,
+  schema: S.Schema<A, I, any>,
   input: unknown
 ): Promise<ParseResult.ParseError> => {
-  const result = S.decodeUnknownEither(schema)(input);
+  const result = S.decodeUnknownEither(schema as S.Schema<A, I, never>)(input);
   if (result._tag === 'Right') {
     throw new Error(`Expected invalid, but got valid: ${JSON.stringify(result.right)}`);
   }
