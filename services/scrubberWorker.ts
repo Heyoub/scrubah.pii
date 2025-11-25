@@ -100,6 +100,19 @@ class ScrubberWorkerManager {
       console.log('⚠️ No Web Worker, using main thread');
       const { piiScrubber } = await import('./piiScrubber');
       const result = await piiScrubber.scrub(text, { regexOnly: true });
+      const originalSize = text.length;
+      const scrubbedSize = result.text.length;
+      const sizeChange = scrubbedSize - originalSize;
+
+      // Calculate PII characters removed (estimate based on size change)
+      const piiCharactersRemoved = Math.max(0, -sizeChange);
+
+      // Calculate PII density
+      const piiDensity = originalSize > 0 ? (piiCharactersRemoved / originalSize) * 100 : 0;
+
+      // Calculate average PII length
+      const avgPiiLength = result.count > 0 ? piiCharactersRemoved / result.count : 0;
+
       return {
         text: result.text,
         replacements: result.replacements,
@@ -111,13 +124,17 @@ class ScrubberWorkerManager {
             totalDurationMs: 0,
             confidenceScore: result.confidence || 95,
             startedAt: Date.now(),
-            completedAt: Date.now()
+            completedAt: Date.now(),
+            piiDensityPercent: Math.round(piiDensity * 100) / 100,
+            piiCharactersRemoved,
+            sizeChangeBytes: sizeChange,
+            averagePiiLength: Math.round(avgPiiLength * 10) / 10
           },
           entries: [],
           document: {
             filename: options.filename,
-            originalSizeBytes: text.length,
-            scrubbedSizeBytes: result.text.length
+            originalSizeBytes: originalSize,
+            scrubbedSizeBytes: scrubbedSize
           }
         }
       };
