@@ -200,7 +200,7 @@ export const runWithLogging = async <A, E>(
  *   { attempts: 3, delayMs: 1000 }
  * );
  */
-export const runWithRetry = async <A, E>(
+export const runWithRetry = async <A, E extends { recoverable: boolean }>(
   effect: Effect.Effect<A, E, never>,
   options: { attempts: number; delayMs: number }
 ): Promise<{ success: true; data: A } | { success: false; error: E }> => {
@@ -217,6 +217,12 @@ export const runWithRetry = async <A, E>(
     }
 
     lastError = result.error;
+
+    // Do not retry unrecoverable errors
+    if (!lastError.recoverable) {
+      console.error(`❌ Unrecoverable error on attempt ${attempt}, aborting retry.`);
+      break;
+    }
 
     if (attempt < options.attempts) {
       const delay = options.delayMs * Math.pow(2, attempt - 1);
