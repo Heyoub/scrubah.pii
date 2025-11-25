@@ -13,7 +13,7 @@ import {
 } from '../schemas';
 
 // Re-export for backward compatibility
-export type { DocumentFingerprint, DuplicateAnalysis, DifferenceType };
+export type { DocumentFingerprint, DuplicateAnalysis, DifferenceType } from '../schemas';
 export { DocumentType };
 
 /**
