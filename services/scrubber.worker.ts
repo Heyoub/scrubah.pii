@@ -120,6 +120,19 @@ export type WorkerResponse = ScrubResponse | ProgressUpdate | ErrorResponse;
 
 type EntityCounters = Record<'PER' | 'LOC' | 'ORG' | 'EMAIL' | 'PHONE' | 'ID' | 'DATE', number>;
 
+/**
+ * Replaces detected personally identifiable information (PII) in the input text with indexed placeholders, tracks each replacement, and produces an audit report.
+ *
+ * @param text - The input text to scan and scrub for PII.
+ * @param filename - Optional source filename used for audit context.
+ * @param jobId - Identifier for the current scrub job (included with progress updates).
+ * @param postProgress - Callback invoked with progress updates during processing.
+ * @returns An object containing:
+ *  - `text`: the scrubbed text with placeholders,
+ *  - `replacements`: a record mapping each original matched token to its placeholder,
+ *  - `count`: the total number of replacements performed,
+ *  - `auditReport`: an AuditReport describing detected items and processing metadata.
+ */
 function scrubText(
   text: string,
   filename: string | undefined,
