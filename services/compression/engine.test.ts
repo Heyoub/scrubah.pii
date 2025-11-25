@@ -4,6 +4,9 @@ import {
   ProcessedDocument,
   defaultCompressionOptions,
 } from './index';
+import { markAsScrubbed } from '../../schemas/phi';
+
+const scrub = (text: string) => markAsScrubbed(text);
 
 describe('Compression Engine', () => {
   describe('Event Extraction', () => {
@@ -11,7 +14,7 @@ describe('Compression Engine', () => {
       const doc: ProcessedDocument = {
         id: 'test-1',
         filename: 'visit.pdf',
-        text: 'Patient had a visit on 03/15/2024 for annual checkup.',
+        text: scrub('Patient had a visit on 03/15/2024 for annual checkup.'),
         metadata: {},
       };
 
@@ -26,7 +29,7 @@ describe('Compression Engine', () => {
       const doc: ProcessedDocument = {
         id: 'test-2',
         filename: 'multi-dates.pdf',
-        text: 'Visit on 01/15/2024. Lab on 02/20/2024. Started meds on 03/10/2024.',
+        text: scrub('Visit on 01/15/2024. Lab on 02/20/2024. Started meds on 03/10/2024.'),
         metadata: {},
       };
 
@@ -39,7 +42,7 @@ describe('Compression Engine', () => {
       const doc: ProcessedDocument = {
         id: 'test-3',
         filename: 'invalid.pdf',
-        text: 'Visit on 99/99/9999',
+        text: scrub('Visit on 99/99/9999'),
         metadata: {},
       };
 
@@ -53,7 +56,7 @@ describe('Compression Engine', () => {
       const doc: ProcessedDocument = {
         id: 'test-4',
         filename: 'ambiguous.pdf',
-        text: 'Appointment on 01/02/2024',
+        text: scrub('Appointment on 01/02/2024'),
         metadata: {},
       };
 
@@ -69,7 +72,7 @@ describe('Compression Engine', () => {
       const doc: ProcessedDocument = {
         id: 'test-5',
         filename: 'empty.pdf',
-        text: '',
+        text: scrub(''),
         metadata: {},
       };
 
@@ -83,11 +86,11 @@ describe('Compression Engine', () => {
       const doc: ProcessedDocument = {
         id: 'test-6',
         filename: 'comprehensive.pdf',
-        text: `
+        text: scrub(`
           Patient visit on 01/10/2024 for routine checkup.
           Lab results received on 01/15/2024 showing elevated glucose.
           Started Metformin 500mg on 01/20/2024.
-        `,
+        `),
         metadata: {},
       };
 
@@ -109,13 +112,13 @@ describe('Compression Engine', () => {
         {
           id: 'doc1',
           filename: 'visit1.pdf',
-          text: 'Visit on 03/15/2024',
+          text: scrub('Visit on 03/15/2024'),
           metadata: {},
         },
         {
           id: 'doc2',
           filename: 'visit2.pdf',
-          text: 'Visit on 03/15/2024',
+          text: scrub('Visit on 03/15/2024'),
           metadata: {},
         },
       ];
@@ -134,13 +137,13 @@ describe('Compression Engine', () => {
         {
           id: 'doc1',
           filename: 'clinic_a.pdf',
-          text: 'Visit on 04/10/2024',
+          text: scrub('Visit on 04/10/2024'),
           metadata: {},
         },
         {
           id: 'doc2',
           filename: 'clinic_b.pdf',
-          text: 'Visit on 04/10/2024',
+          text: scrub('Visit on 04/10/2024'),
           metadata: {},
         },
       ];
@@ -159,13 +162,13 @@ describe('Compression Engine', () => {
         {
           id: 'doc1',
           filename: 'dup1.pdf',
-          text: 'Visit on 05/01/2024',
+          text: scrub('Visit on 05/01/2024'),
           metadata: {},
         },
         {
           id: 'doc2',
           filename: 'dup2.pdf',
-          text: 'Visit on 05/01/2024',
+          text: scrub('Visit on 05/01/2024'),
           metadata: {},
         },
       ];
@@ -183,13 +186,13 @@ describe('Compression Engine', () => {
         {
           id: 'doc1',
           filename: 'lab1.pdf',
-          text: 'Lab results on 06/01/2024',
+          text: scrub('Lab results on 06/01/2024'),
           metadata: {},
         },
         {
           id: 'doc2',
           filename: 'lab2.pdf',
-          text: 'Lab test on 06/01/2024',
+          text: scrub('Lab test on 06/01/2024'),
           metadata: {},
         },
       ];
@@ -210,13 +213,13 @@ describe('Compression Engine', () => {
         {
           id: 'doc1',
           filename: 'visit.pdf',
-          text: 'Visit on 01/10/2024', // Medium confidence
+          text: scrub('Visit on 01/10/2024'), // Medium confidence
           metadata: {},
         },
         {
           id: 'doc2',
           filename: 'labs.pdf',
-          text: 'Lab results on 01/05/2024', // High confidence
+          text: scrub('Lab results on 01/05/2024'), // High confidence
           metadata: {},
         },
       ];
@@ -237,13 +240,13 @@ describe('Compression Engine', () => {
         {
           id: 'doc1',
           filename: 'lab1.pdf',
-          text: 'Lab results on 01/01/2024',
+          text: scrub('Lab results on 01/01/2024'),
           metadata: {},
         },
         {
           id: 'doc2',
           filename: 'lab2.pdf',
-          text: 'Lab results on 06/01/2024',
+          text: scrub('Lab results on 06/01/2024'),
           metadata: {},
         },
       ];
@@ -262,7 +265,7 @@ describe('Compression Engine', () => {
       const docs: ProcessedDocument[] = Array.from({ length: 10 }, (_, i) => ({
         id: `doc${i}`,
         filename: `test${i}.pdf`,
-        text: `Visit on ${(i % 12) + 1}/15/2024`,
+        text: scrub(`Visit on ${(i % 12) + 1}/15/2024`),
         metadata: {},
       }));
 
@@ -294,7 +297,7 @@ describe('Compression Engine', () => {
       const docs: ProcessedDocument[] = Array.from({ length: 50 }, (_, i) => ({
         id: `doc${i}`,
         filename: `test${i}.pdf`,
-        text: `Visit on ${(i % 12) + 1}/${(i % 28) + 1}/2024`,
+        text: scrub(`Visit on ${(i % 12) + 1}/${(i % 28) + 1}/2024`),
         metadata: {},
       }));
 
@@ -312,7 +315,7 @@ describe('Compression Engine', () => {
       const docs: ProcessedDocument[] = Array.from({ length: 20 }, (_, i) => ({
         id: `doc${i}`,
         filename: `test${i}.pdf`,
-        text: `Visit on ${(i % 12) + 1}/15/2024`,
+        text: scrub(`Visit on ${(i % 12) + 1}/15/2024`),
         metadata: {},
       }));
 
@@ -331,7 +334,7 @@ describe('Compression Engine', () => {
       const docs: ProcessedDocument[] = Array.from({ length: 100 }, (_, i) => ({
         id: `doc${i}`,
         filename: `test${i}.pdf`,
-        text: `Visit on ${(i % 12) + 1}/${(i % 28) + 1}/2024`,
+        text: scrub(`Visit on ${(i % 12) + 1}/${(i % 28) + 1}/2024`),
         metadata: {},
       }));
 
@@ -349,7 +352,7 @@ describe('Compression Engine', () => {
         {
           id: 'doc1',
           filename: 'large.pdf',
-          text: 'A'.repeat(10000), // ~10KB
+          text: scrub('A'.repeat(10000)), // ~10KB
           metadata: {},
         },
       ];
@@ -369,7 +372,7 @@ describe('Compression Engine', () => {
         {
           id: 'doc1',
           filename: 'test.pdf',
-          text: 'Visit on 01/15/2024',
+          text: scrub('Visit on 01/15/2024'),
           metadata: {},
         },
       ];
@@ -386,7 +389,7 @@ describe('Compression Engine', () => {
         {
           id: 'doc1',
           filename: 'test.pdf',
-          text: 'Visit on 01/10/2024. Lab on 01/15/2024.',
+          text: scrub('Visit on 01/10/2024. Lab on 01/15/2024.'),
           metadata: {},
         },
       ];
@@ -404,7 +407,7 @@ describe('Compression Engine', () => {
         {
           id: 'doc1',
           filename: 'test.pdf',
-          text: 'Visit on 01/15/2024',
+          text: scrub('Visit on 01/15/2024'),
           metadata: {},
         },
       ];
@@ -430,7 +433,7 @@ describe('Compression Engine', () => {
         {
           id: 'doc1',
           filename: 'bad.pdf',
-          text: 'Visit on invalid-date',
+          text: scrub('Visit on invalid-date'),
           metadata: {},
         },
       ];
@@ -445,7 +448,7 @@ describe('Compression Engine', () => {
         {
           id: 'doc1',
           filename: 'malformed.pdf',
-          text: '\x00\x01\x02', // Binary data
+          text: scrub('\x00\x01\x02'), // Binary data
           metadata: {},
         },
       ];
@@ -460,19 +463,19 @@ describe('Compression Engine', () => {
         {
           id: 'doc1',
           filename: 'bad1.pdf',
-          text: 'Visit on 99/99/9999',
+          text: scrub('Visit on 99/99/9999'),
           metadata: {},
         },
         {
           id: 'doc2',
           filename: 'good.pdf',
-          text: 'Visit on 01/15/2024',
+          text: scrub('Visit on 01/15/2024'),
           metadata: {},
         },
         {
           id: 'doc3',
           filename: 'bad2.pdf',
-          text: 'Visit on invalid',
+          text: scrub('Visit on invalid'),
           metadata: {},
         },
       ];
@@ -491,7 +494,7 @@ describe('Compression Engine', () => {
         {
           id: 'doc1',
           filename: 'test.pdf',
-          text: 'Visit on 01/15/2024',
+          text: scrub('Visit on 01/15/2024'),
           metadata: {},
         },
       ];
@@ -512,7 +515,7 @@ describe('Compression Engine', () => {
       const docs: ProcessedDocument[] = Array.from({ length: 5 }, (_, i) => ({
         id: `doc${i}`,
         filename: `test${i}.pdf`,
-        text: `Visit on ${i + 1}/15/2024`,
+        text: scrub(`Visit on ${i + 1}/15/2024`),
         metadata: {},
       }));
 
@@ -534,7 +537,7 @@ describe('Compression Engine', () => {
         {
           id: 'doc1',
           filename: 'single.pdf',
-          text: 'Visit on 01/15/2024',
+          text: scrub('Visit on 01/15/2024'),
           metadata: {},
         },
       ];
@@ -548,7 +551,7 @@ describe('Compression Engine', () => {
       const docs: ProcessedDocument[] = Array.from({ length: 200 }, (_, i) => ({
         id: `doc${i}`,
         filename: `test${i}.pdf`,
-        text: `Visit on ${(i % 12) + 1}/${(i % 28) + 1}/2024`,
+        text: scrub(`Visit on ${(i % 12) + 1}/${(i % 28) + 1}/2024`),
         metadata: {},
       }));
 
@@ -566,7 +569,7 @@ describe('Compression Engine', () => {
         {
           id: 'doc1',
           filename: 'special<>:"/\\|?*.pdf',
-          text: 'Visit on 01/15/2024 with émojis 🏥',
+          text: scrub('Visit on 01/15/2024 with émojis 🏥'),
           metadata: {},
         },
       ];
@@ -581,7 +584,7 @@ describe('Compression Engine', () => {
         {
           id: 'doc1',
           filename: 'long.pdf',
-          text: 'Visit on 01/15/2024. ' + 'A'.repeat(100000),
+          text: scrub('Visit on 01/15/2024. ' + 'A'.repeat(100000)),
           metadata: {},
         },
       ];

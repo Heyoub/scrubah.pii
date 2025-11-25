@@ -233,7 +233,8 @@ const App: React.FC = () => {
       const documents: ProcessedDocument[] = completedFiles.map(f => ({
         id: f.id,
         filename: f.originalName,
-        text: f.scrubbedText || '',
+        // scrubbedText is guaranteed by the processing stage filter above
+        text: f.scrubbedText!,
         metadata: {
           documentType: f.type,
         }

@@ -18,6 +18,7 @@
  */
 
 import { Effect } from "effect";
+import { assertScrubbed, ScrubbedText } from "../../schemas/phi";
 import {
   CompressedTimeline,
   TimelineEntry,
@@ -46,7 +47,7 @@ import {
 export interface ProcessedDocument {
   id: string;
   filename: string;
-  text: string;
+  text: ScrubbedText;
   metadata: {
     pageCount?: number;
     createdAt?: Date;
@@ -450,6 +451,51 @@ export const compressTimeline = (
 > => {
   return Effect.gen(function* (_) {
     const errorCollector = new ErrorCollector();
+
+    // Zero-trust guardrail: compression must never see raw PHI
+    const safeDocuments = (() => {
+      const unsafeDocs = [];
+      for (const doc of documents) {
+        try {
+          assertScrubbed(doc.text);
+        } catch (error) {
+          unsafeDocs.push({
+            file: doc.filename,
+            message: error instanceof Error ? error.message : "unsafe text",
+          });
+          errorCollector.add(new ParseError({
+            file: doc.filename,
+            field: "text",
+            expected: "ScrubbedText with placeholders (PII removed)",
+            actual: error instanceof Error ? error.message : "unsafe text",
+            suggestion: "Unscrubbed input detected. Aborting compression to prevent PHI leakage.",
+            extra: { reason: "PHI_POLICY_VIOLATION_UNSCRUBBED" }
+          }));
+        }
+      }
+      if (unsafeDocs.length > 0) {
+        throw new CompressionError({
+          message: "Aborting: one or more documents are not scrubbed",
+          extra: { violations: unsafeDocs }
+        });
+      }
+      return documents;
+    })();
+
+    // The rest of the function should use `safeDocuments` instead of `documents`.
+    // For example, the first use is in STAGE 1:
+    // const allEvents = yield* _(
+    //   Effect.all(
+    //     safeDocuments.map((doc, i) =>
+    //       Effect.succeed(doc).pipe(
+    //         Effect.flatMap((d) => extractEventsFromDocument(d, errorCollector)),
+    //         Effect.tap(() => progressCallback?.({ stage: "extracting", current: i + 1, total: safeDocuments.length }))
+    //       )
+    //     ),
+    //     { concurrency: "inherit" }
+    //   )
+    // );
+    // ... and so on for other usages of `documents`.
 
     // STAGE 1: Extract events
     progressCallback?.({
