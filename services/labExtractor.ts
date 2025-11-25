@@ -1,22 +1,17 @@
 /**
  * Structured Lab Data Extraction
  * Converts prose lab reports into token-efficient table format
+ *
+ * Types imported from schemas.ts (single source of truth)
  */
 
-export interface LabResult {
-  testName: string;
-  value: string;
-  unit: string;
-  referenceRange?: string;
-  status?: 'Normal' | 'High' | 'Low' | 'Critical';
-  date: string;
-}
+import {
+  type LabResult,
+  type LabPanel,
+} from '../schemas';
 
-export interface LabPanel {
-  panelName: string;
-  date: string;
-  results: LabResult[];
-}
+// Re-export for backward compatibility
+export type { LabResult, LabPanel };
 
 /**
  * Common lab test patterns with their variations

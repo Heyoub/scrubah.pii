@@ -1,47 +1,32 @@
 /**
  * Temporal Organization & Master Timeline Generation
  * Optimized for LLM pathological analysis
+ *
+ * Types imported from schemas.ts (single source of truth)
  */
 
 import { parse, isValid } from 'date-fns';
 import {
-  DocumentFingerprint,
-  DuplicateAnalysis,
-  analyzeDuplication,
-  generateFingerprint,
-  DocumentType
-} from './contentHasher';
-import { extractLabResults, formatLabTable, generateTrendAnalysis, LabPanel } from './labExtractor';
+  type DocumentFingerprint,
+  type DuplicateAnalysis,
+  type TimelineDocument,
+  type MasterTimeline,
+  type TimelineSummary,
+  type LabPanel,
+  DocumentType,
+} from '../schemas';
+import { analyzeDuplication, generateFingerprint } from './contentHasher';
+import { extractLabResults, formatLabTable, generateTrendAnalysis } from './labExtractor';
 import { ProcessedFile } from '../types';
 
-export interface TimelineDocument {
-  id: string;
-  filename: string;
-  date: Date;
-  displayDate: string;
-  content: string;
-  fingerprint: DocumentFingerprint;
-  duplicationInfo?: DuplicateAnalysis;
-  labData?: LabPanel;
-  documentNumber: number; // Position in chronological order
-}
-
-export interface MasterTimeline {
-  documents: TimelineDocument[];
-  summary: TimelineSummary;
-  markdown: string;
-}
-
-export interface TimelineSummary {
-  totalDocuments: number;
-  uniqueDocuments: number;
-  duplicates: number;
-  dateRange: {
-    earliest: string;
-    latest: string;
-  };
-  documentTypes: Record<DocumentType, number>;
-}
+// Re-export for backward compatibility
+export type {
+  TimelineDocument,
+  MasterTimeline,
+  TimelineSummary,
+  DocumentFingerprint,
+  DuplicateAnalysis,
+};
 
 /**
  * Extract primary date from filename or content using date-fns
