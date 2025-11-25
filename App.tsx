@@ -188,7 +188,9 @@ const App: React.FC = () => {
     setIsGeneratingTimeline(true);
 
     try {
-      console.log(`📊 Generating master timeline from ${completedFiles.length} documents...`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`📊 Generating master timeline from ${completedFiles.length} documents...`);
+      }
       const timeline = await buildMasterTimeline(completedFiles);
 
       // Download automatically
@@ -200,8 +202,10 @@ const App: React.FC = () => {
       a.click();
       URL.revokeObjectURL(url);
 
-      console.log('✅ Master timeline generated successfully!');
-      console.log(`📈 Stats: ${timeline.summary.totalDocuments} total, ${timeline.summary.uniqueDocuments} unique, ${timeline.summary.duplicates} duplicates`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('✅ Master timeline generated successfully!');
+        console.log(`📈 Stats: ${timeline.summary.totalDocuments} total, ${timeline.summary.uniqueDocuments} unique, ${timeline.summary.duplicates} duplicates`);
+      }
 
     } catch (error) {
       console.error('Error generating timeline:', error);
@@ -404,7 +408,7 @@ const App: React.FC = () => {
           </div>
           
           <div className="flex flex-col md:items-end gap-1">
-            <span className="font-bold text-black">© 2024 Forgestack.app</span>
+            <span className="font-bold text-black">© 2025 Forgestack.app</span>
             <a href="mailto:hello@forgestack.app" className="hover:text-accent-600 flex items-center gap-1">
                 <Mail className="w-3 h-3" /> hello@forgestack.app
             </a>
