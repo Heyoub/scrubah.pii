@@ -9,7 +9,7 @@ import {
   Mail,
   Cpu,
   Calendar,
-  Minimize2
+  AlertTriangle
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { clsx } from 'clsx';
@@ -20,8 +20,6 @@ import { parseFile } from './services/fileParser';
 import { piiScrubber } from './services/piiScrubber';
 import { formatToMarkdown } from './services/markdownFormatter';
 import { buildMasterTimeline } from './services/timelineOrganizer';
-import { runCompression, defaultCompressionOptions, generateYAMLFromResult } from './services/compression';
-import type { ProcessedDocument } from './services/compression';
 import { db } from './services/db';
 import { ProcessedFile, ProcessingStage } from './types';
 
@@ -31,8 +29,6 @@ const App: React.FC = () => {
   const [modelLoading, setModelLoading] = useState(false);
   const [modelError, setModelError] = useState<string | null>(null);
   const [isGeneratingTimeline, setIsGeneratingTimeline] = useState(false);
-  const [isCompressing, setIsCompressing] = useState(false);
-  const [compressionProgress, setCompressionProgress] = useState<string>('');
 
   useEffect(() => {
     const initModel = async () => {
@@ -215,86 +211,6 @@ const App: React.FC = () => {
     }
   };
 
-  const handleCompressTimeline = async () => {
-    const completedFiles = files.filter(f => f.stage === ProcessingStage.COMPLETED && f.scrubbedText);
-
-    if (completedFiles.length === 0) {
-      alert('No processed files to compress. Please process some documents first.');
-      return;
-    }
-
-    setIsCompressing(true);
-    setCompressionProgress('Preparing documents...');
-
-    try {
-      console.log(`🗜️ Compressing ${completedFiles.length} documents...`);
-
-      // Convert ProcessedFile to ProcessedDocument format with runtime guard
-      const documents: ProcessedDocument[] = [];
-      for (const f of completedFiles) {
-        const text = f.scrubbedText;
-        if (!text) {
-          console.warn(`Missing scrubbed text for file: ${f.originalName}`);
-          continue;
-        }
-
-        documents.push({
-          id: f.id,
-          filename: f.originalName,
-          // Branding/validation occurs in the compression layer
-          text: text as any,
-          metadata: {
-            documentType: f.type,
-          }
-        });
-      }
-
-      if (documents.length === 0) {
-        alert('No valid scrubbed documents available for compression.');
-        setIsCompressing(false);
-        return;
-      }
-
-      // Run compression with progress callback
-      const result = await runCompression(documents, {
-        ...defaultCompressionOptions,
-        maxOutputSizeKb: 100, // 100KB target
-      }, (progress) => {
-        setCompressionProgress(progress.message);
-      });
-
-      // Generate YAML
-      setCompressionProgress('Generating YAML output...');
-      const yaml = await generateYAMLFromResult(result.timeline, result.errors);
-
-      // Download YAML
-      const blob = new Blob([yaml], { type: 'text/yaml; charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `Compressed_Timeline_${new Date().toISOString().split('T')[0]}.yaml`;
-      document.body.appendChild(a); // Append to body for better browser compatibility
-      a.click();
-      document.body.removeChild(a); // Clean up the element
-      setTimeout(() => URL.revokeObjectURL(url), 100); // Revoke after a short delay
-
-      console.log('✅ Timeline compressed successfully!');
-      console.log(`📊 Compression: ${result.timeline.compressionMetadata.originalSizeKb.toFixed(2)}KB → ${result.timeline.compressionMetadata.compressedSizeKb.toFixed(2)}KB (${(result.timeline.compressionMetadata.ratio * 100).toFixed(1)}%)`);
-      console.log(`📈 Events: ${result.timeline.compressionMetadata.eventsIncluded}/${result.timeline.compressionMetadata.eventsTotal} included`);
-
-      if (result.errors.hasErrors()) {
-        console.warn(`⚠️ ${result.errors.getAll().length} warnings collected during compression`);
-      }
-
-    } catch (error) {
-      console.error('Error compressing timeline:', error);
-      alert('Failed to compress timeline. Check console for details.');
-    } finally {
-      setIsCompressing(false);
-      setCompressionProgress('');
-    }
-  };
-
   const completedCount = files.filter(f => f.stage === ProcessingStage.COMPLETED).length;
 
   return (
@@ -357,6 +273,35 @@ const App: React.FC = () => {
             pipeline. Scrub Personally Identifiable Information (PII) from contracts, records, and transcripts using on-device AI.
             Format for LLMs without leaking secrets.
           </p>
+        </div>
+
+        {/* Important Disclaimer */}
+        <div className="bg-amber-50 border-l-4 border-amber-500 p-5 mb-8">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
+            <div className="space-y-3">
+              <h3 className="font-bold text-amber-900 uppercase tracking-tight text-sm">
+                Important: Always Verify Before Sharing
+              </h3>
+              <div className="text-sm text-amber-800 space-y-2">
+                <p>
+                  <strong>This tool uses AI and pattern matching which may not catch all PII.</strong> No automated system is 100% accurate.
+                  You are responsible for reviewing all output before sharing or submitting to any external service.
+                </p>
+                <p>
+                  <strong>Always manually verify:</strong> Use <kbd className="bg-amber-200 px-1.5 py-0.5 rounded text-xs font-mono">Ctrl+F</kbd> (Windows/Linux)
+                  or <kbd className="bg-amber-200 px-1.5 py-0.5 rounded text-xs font-mono">Cmd+F</kbd> (Mac) to search for names, dates, addresses,
+                  and other sensitive information that may have been missed.
+                </p>
+                <p className="text-xs text-amber-700 pt-1 border-t border-amber-200">
+                  <strong>Zero-Trust Architecture:</strong> All processing happens locally in your browser. No data is sent to any server.
+                  However, this does not constitute legal or compliance advice. Consult your compliance officer before using
+                  scrubbed documents for HIPAA, GDPR, or other regulated purposes. By using this tool, you accept full responsibility
+                  for verifying the completeness of PII removal.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Error Banner */}
@@ -422,30 +367,6 @@ const App: React.FC = () => {
                   <>
                     <Calendar className="w-4 h-4" />
                     Generate Timeline ({completedCount})
-                  </>
-                )}
-              </button>
-
-              <button
-                onClick={handleCompressTimeline}
-                disabled={completedCount === 0 || isCompressing}
-                className={clsx(
-                  "flex items-center gap-2 px-6 py-3 font-bold uppercase tracking-wide border-2 shadow-hard hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all",
-                  completedCount > 0 && !isCompressing
-                    ? "bg-blue-600 text-white border-black"
-                    : "bg-zinc-200 text-zinc-400 border-zinc-300 shadow-none cursor-not-allowed"
-                )}
-                title={compressionProgress || "Compress timeline to YAML (LLM-optimized)"}
-              >
-                {isCompressing ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span className="text-xs">{compressionProgress || 'Compressing...'}</span>
-                  </>
-                ) : (
-                  <>
-                    <Minimize2 className="w-4 h-4" />
-                    Compress YAML ({completedCount})
                   </>
                 )}
               </button>
