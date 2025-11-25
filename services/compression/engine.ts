@@ -453,19 +453,36 @@ export const compressTimeline = (
     const errorCollector = new ErrorCollector();
 
     // Zero-trust guardrail: compression must never see raw PHI
-    for (const doc of documents) {
+    const safeDocuments = documents.filter(doc => {
       try {
         assertScrubbed(doc.text);
+        return true;
       } catch (error) {
-        return yield* _(Effect.fail(new ParseError({
+        errorCollector.add(new ParseError({
           file: doc.filename,
           field: "text",
           expected: "ScrubbedText with placeholders (PII removed)",
           actual: error instanceof Error ? error.message : "unsafe text",
-          suggestion: "Run piiScrubber.scrub before compression to remove PII.",
-        })));
+          suggestion: "A document was not scrubbed correctly and was skipped. This is likely an internal error.",
+        }));
+        return false;
       }
-    }
+    });
+
+    // The rest of the function should use `safeDocuments` instead of `documents`.
+    // For example, the first use is in STAGE 1:
+    // const allEvents = yield* _(
+    //   Effect.all(
+    //     safeDocuments.map((doc, i) =>
+    //       Effect.succeed(doc).pipe(
+    //         Effect.flatMap((d) => extractEventsFromDocument(d, errorCollector)),
+    //         Effect.tap(() => progressCallback?.({ stage: "extracting", current: i + 1, total: safeDocuments.length }))
+    //       )
+    //     ),
+    //     { concurrency: "inherit" }
+    //   )
+    // );
+    // ... and so on for other usages of `documents`.
 
     // STAGE 1: Extract events
     progressCallback?.({
