@@ -393,7 +393,9 @@ export const collectGarbage = (
   discarded: ProcessedFile[];
 }, never, never> => {
   return Effect.gen(function* (_) {
-    console.log('🗑️  Running garbage collection on documents...');
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('🗑️  Running garbage collection on documents...');
+    }
 
     const kept: ProcessedFile[] = [];
     const demoted: ProcessedFile[] = [];
@@ -409,12 +411,14 @@ export const collectGarbage = (
       const relevance = yield* _(calculateRelevanceScore(doc.scrubbedText, doc.originalName));
 
       // Log details
-      console.log(`📄 ${doc.originalName}:`);
-      console.log(`   Score: ${relevance.score.toFixed(0)}/100`);
-      console.log(`   Placeholders: ${(relevance.placeholderDensity * 100).toFixed(0)}%`);
-      console.log(`   Medical: ${(relevance.medicalContentDensity * 100).toFixed(0)}%`);
-      console.log(`   Refs: ${relevance.clinicalReferences} | Gen: ${relevance.generation}`);
-      console.log(`   → ${relevance.recommendation.toUpperCase()}: ${relevance.reason}`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`📄 ${doc.originalName}:`);
+        console.log(`   Score: ${relevance.score.toFixed(0)}/100`);
+        console.log(`   Placeholders: ${(relevance.placeholderDensity * 100).toFixed(0)}%`);
+        console.log(`   Medical: ${(relevance.medicalContentDensity * 100).toFixed(0)}%`);
+        console.log(`   Refs: ${relevance.clinicalReferences} | Gen: ${relevance.generation}`);
+        console.log(`   → ${relevance.recommendation.toUpperCase()}: ${relevance.reason}`);
+      }
 
       // Sort into buckets
       if (relevance.recommendation === 'keep') {
@@ -426,11 +430,13 @@ export const collectGarbage = (
       }
     }
 
-    console.log(`\n✅ GC Results:`);
-    console.log(`   Kept: ${kept.length} (high value)`);
-    console.log(`   Demoted: ${demoted.length} (low priority)`);
-    console.log(`   Discarded: ${discarded.length} (garbage)`);
-    console.log(`   Memory saved: ${discarded.length}/${documents.length} documents (${((discarded.length / documents.length) * 100).toFixed(0)}%)\n`);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`\n✅ GC Results:`);
+      console.log(`   Kept: ${kept.length} (high value)`);
+      console.log(`   Demoted: ${demoted.length} (low priority)`);
+      console.log(`   Discarded: ${discarded.length} (garbage)`);
+      console.log(`   Memory saved: ${discarded.length}/${documents.length} documents (${((discarded.length / documents.length) * 100).toFixed(0)}%)\n`);
+    }
 
     return { kept, demoted, discarded };
   });

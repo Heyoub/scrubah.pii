@@ -367,4 +367,3 @@ A: Should work. Timeline generation is O(n log n). For 1000 docs: ~2-3 seconds.
 
 **Q: Can I still download individual files?**
 A: Yes! Timeline is additive. Individual exports still work.
-

@@ -124,15 +124,11 @@ Open <http://localhost:3501/> (or check console for port)
 ### Timeline Generation
 
 ```mermaid
-Upload 142 medical PDFs
-  ↓
-Wait for green checkmarks (all processed)
-  ↓
-Click "Generate Timeline" button
-  ↓
-Downloads: Medical_Timeline_YYYY-MM-DD.md
-  ↓
-Feed to Claude/GPT-4 for analysis
+graph TD
+    A[Upload medical PDFs] --> B[Wait for green checkmarks]
+    B --> C[Click Generate Timeline button]
+    C --> D[Download Medical_Timeline_YYYY-MM-DD.md]
+    D --> E[Feed to your AI of choice for analysis]
 ```
 
 **Example Timeline Output:**
