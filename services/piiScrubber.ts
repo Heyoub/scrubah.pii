@@ -11,6 +11,16 @@ const TARGET_ENTITIES = ['PER', 'LOC', 'ORG'] as const;
 /** Counter state for placeholder numbering */
 type EntityCounters = Record<'PER' | 'LOC' | 'ORG' | 'EMAIL' | 'PHONE' | 'ID' | 'DATE', number>;
 
+// US State abbreviations for standalone detection
+const US_STATES = new Set([
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
+  'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
+  'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+  'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
+  'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY',
+  'DC', 'PR', 'VI', 'GU', 'AS', 'MP' // DC and territories
+]);
+
 // Regex patterns for Hybrid Scrubbing (Presidio-style pre-pass)
 const PATTERNS = {
   EMAIL: /\b[\w\.-]+@[\w\.-]+\.\w{2,4}\b/g,
@@ -22,7 +32,11 @@ const PATTERNS = {
   // Address patterns
   ADDRESS: /\d+\s+(?:[A-Za-z]+\s+){1,4}(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr|Court|Ct|Parkway|Pkwy|Way|Circle|Cir|Place|Pl|Terrace|Ter)(?:\.|\s|,|\s+Apt|\s+Suite|\s+Unit|\s+#)?(?:\s*[A-Za-z0-9#-]*)?/gi,
   CITY_STATE: /\b[A-Z][a-zA-Z\s]+,\s*[A-Z]{2}\b/g,
-  PO_BOX: /P\.?\s*O\.?\s*Box\s+\d+/gi
+  PO_BOX: /P\.?\s*O\.?\s*Box\s+\d+/gi,
+  // ALL CAPS names: "TUAH, AWURA" or "JOHN SMITH" (2+ consecutive uppercase words)
+  ALL_CAPS_NAME: /\b[A-Z]{2,}(?:,?\s+[A-Z]{2,})+\b/g,
+  // LAST, FIRST format (Title Case): "Smith, John" or "Van Der Berg, Maria"
+  LAST_FIRST_NAME: /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g
 };
 
 // Context-aware MRN detector
@@ -61,6 +75,38 @@ const NAME_LABELS = [
   'patient_name', 'fullName', 'full_name'
 ];
 
+/**
+ * Detect standalone US state abbreviations (e.g., "MA", "NY")
+ * Only matches when it's clearly a state context, not random 2-letter words
+ */
+const detectStandaloneStates = (text: string): { start: number; end: number; value: string }[] => {
+  const matches: { start: number; end: number; value: string }[] = [];
+
+  // Match 2-letter uppercase words at word boundaries
+  const statePattern = /\b([A-Z]{2})\b/g;
+  let match;
+
+  while ((match = statePattern.exec(text)) !== null) {
+    const potentialState = match[1];
+
+    // Check if it's a valid US state
+    if (US_STATES.has(potentialState)) {
+      // Skip if it's already part of a placeholder like [LOC_1]
+      const before = text.slice(Math.max(0, match.index - 1), match.index);
+      const after = text.slice(match.index + 2, match.index + 3);
+      if (before === '[' || after === ']' || before === '_') continue;
+
+      matches.push({
+        start: match.index,
+        end: match.index + 2,
+        value: potentialState
+      });
+    }
+  }
+
+  return matches;
+};
+
 const detectLabeledName = (text: string): { start: number; end: number; value: string }[] => {
   const matches: { start: number; end: number; value: string }[] = [];
 
@@ -79,24 +125,44 @@ const detectLabeledName = (text: string): { start: number; end: number; value: s
   let labelMatch;
   while ((labelMatch = labelPattern.exec(text)) !== null) {
     const afterLabel = text.slice(labelMatch.index + labelMatch[0].length);
+    const start = labelMatch.index + labelMatch[0].length;
 
-    // Name pattern (CASE SENSITIVE) - requires proper capitalization
-    // Optional title (Dr., Mr., Ms., Mrs., Miss) followed by capitalized name parts
-    const namePattern = /^((?:Dr|Mr|Ms|Mrs|Miss)\.?\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/;
-    const nameMatch = afterLabel.match(namePattern);
+    // Try multiple name patterns in order of specificity
 
-    if (nameMatch) {
-      // Reconstruct full name with title (preserve period if present)
-      const title = nameMatch[1]?.trim() || '';
-      const name = nameMatch[2];
-      const fullName = title ? `${title} ${name}` : name;
-
-      const start = labelMatch.index + labelMatch[0].length;
-
+    // Pattern 1: ALL CAPS with optional comma (LAST, FIRST or FIRST LAST)
+    const allCapsPattern = /^([A-Z]{2,}(?:,?\s+[A-Z]{2,})+)/;
+    const allCapsMatch = afterLabel.match(allCapsPattern);
+    if (allCapsMatch) {
       matches.push({
         start,
-        end: start + fullName.length,
-        value: fullName
+        end: start + allCapsMatch[1].length,
+        value: allCapsMatch[1]
+      });
+      continue;
+    }
+
+    // Pattern 2: LAST, FIRST format (Title Case)
+    const lastFirstPattern = /^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/;
+    const lastFirstMatch = afterLabel.match(lastFirstPattern);
+    if (lastFirstMatch) {
+      matches.push({
+        start,
+        end: start + lastFirstMatch[1].length,
+        value: lastFirstMatch[1]
+      });
+      continue;
+    }
+
+    // Pattern 3: Standard Title Case (with optional title like Dr., Mr.)
+    const namePattern = /^((?:Dr|Mr|Ms|Mrs|Miss)\.?\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/;
+    const nameMatch = afterLabel.match(namePattern);
+    if (nameMatch) {
+      // Use actual matched length, not reconstructed
+      const matchedText = nameMatch[0];
+      matches.push({
+        start,
+        end: start + matchedText.length,
+        value: matchedText.trim()
       });
     }
   }
@@ -106,8 +172,12 @@ const detectLabeledName = (text: string): { start: number; end: number; value: s
 
 // Secondary validation patterns (broader, more aggressive)
 const VALIDATION_PATTERNS = {
-  // Catch any remaining capitalized word sequences (potential names)
+  // Catch any remaining capitalized word sequences (potential names) - Title Case
   CAPITALIZED_SEQUENCE: /\b[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})+\b/g,
+  // Catch ALL CAPS name sequences: "JOHN SMITH" or "TUAH, AWURA"
+  ALL_CAPS_SEQUENCE: /\b[A-Z]{2,}(?:,?\s+[A-Z]{2,})+\b/g,
+  // Catch LAST, FIRST format: "Smith, John"
+  LAST_FIRST_SEQUENCE: /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g,
   // Catch any remaining numeric sequences that look like IDs
   NUMERIC_ID: /\b[A-Z]{0,3}\d{6,12}\b/g,
   // Catch email-like patterns that might have been missed
@@ -143,11 +213,13 @@ interface ValidationResult {
 export {
   detectContextualMRN,
   detectLabeledName,
+  detectStandaloneStates,
   PATTERNS,
   VALIDATION_PATTERNS,
   WHITELIST_TERMS,
   MRN_CONTEXT_KEYWORDS,
-  NAME_LABELS
+  NAME_LABELS,
+  US_STATES
 };
 
 class PiiScrubberService {
@@ -245,6 +317,23 @@ class PiiScrubberService {
     runRegex('LOC', PATTERNS.ADDRESS, 'ADDR');
     runRegex('LOC', PATTERNS.PO_BOX, 'POBOX');
     runRegex('LOC', PATTERNS.CITY_STATE, 'LOC');
+
+    // Name patterns - catch ALL CAPS and LAST, FIRST formats
+    runRegex('PER', PATTERNS.ALL_CAPS_NAME, 'PER');
+    runRegex('PER', PATTERNS.LAST_FIRST_NAME, 'PER');
+
+    // Standalone state abbreviation detection (after addresses to avoid double-matching)
+    const stateMatches = detectStandaloneStates(interimText);
+    stateMatches.reverse().forEach(({ start, end, value }) => {
+      if (!entityToPlaceholder[value]) {
+        counters.LOC++;
+        const placeholder = `[STATE_${counters.LOC}]`;
+        entityToPlaceholder[value] = placeholder;
+        globalReplacements[value] = placeholder;
+        totalReplacements++;
+      }
+      interimText = interimText.substring(0, start) + entityToPlaceholder[value] + interimText.substring(end);
+    });
 
     // Context-aware MRN detection
     const mrnMatches = detectContextualMRN(interimText);
@@ -522,6 +611,38 @@ class PiiScrubberService {
       }
     }
 
+    // 1b. Catch ALL CAPS name sequences (e.g., "TUAH, AWURA", "JOHN SMITH")
+    const allCapsMatches = validatedText.match(VALIDATION_PATTERNS.ALL_CAPS_SEQUENCE) || [];
+    for (const match of allCapsMatches) {
+      if (isPlaceholder(match)) continue;
+
+      if (!entityToPlaceholder[match]) {
+        counters.PER++;
+        const placeholder = `[PER_${counters.PER}]`;
+        entityToPlaceholder[match] = placeholder;
+        globalReplacements[match] = placeholder;
+        additionalReplacements[match] = placeholder;
+        additionalCount++;
+      }
+      validatedText = validatedText.replace(new RegExp(match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), entityToPlaceholder[match]);
+    }
+
+    // 1c. Catch LAST, FIRST format names (e.g., "Smith, John")
+    const lastFirstMatches = validatedText.match(VALIDATION_PATTERNS.LAST_FIRST_SEQUENCE) || [];
+    for (const match of lastFirstMatches) {
+      if (isPlaceholder(match) || isWhitelisted(match)) continue;
+
+      if (!entityToPlaceholder[match]) {
+        counters.PER++;
+        const placeholder = `[PER_${counters.PER}]`;
+        entityToPlaceholder[match] = placeholder;
+        globalReplacements[match] = placeholder;
+        additionalReplacements[match] = placeholder;
+        additionalCount++;
+      }
+      validatedText = validatedText.replace(new RegExp(match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), entityToPlaceholder[match]);
+    }
+
     // 2. Catch remaining numeric IDs
     const numericMatches = validatedText.match(VALIDATION_PATTERNS.NUMERIC_ID) || [];
     for (const match of numericMatches) {
@@ -621,6 +742,8 @@ class PiiScrubberService {
     // Check for patterns that shouldn't be in scrubbed text
     const checks = [
       { pattern: VALIDATION_PATTERNS.CAPITALIZED_SEQUENCE, type: 'Capitalized sequence (potential name)' },
+      { pattern: VALIDATION_PATTERNS.ALL_CAPS_SEQUENCE, type: 'ALL CAPS sequence (potential name)' },
+      { pattern: VALIDATION_PATTERNS.LAST_FIRST_SEQUENCE, type: 'LAST, FIRST format (potential name)' },
       { pattern: VALIDATION_PATTERNS.NUMERIC_ID, type: 'Numeric ID' },
       { pattern: VALIDATION_PATTERNS.EMAIL_LIKE, type: 'Email-like pattern' },
       { pattern: VALIDATION_PATTERNS.PHONE_LIKE, type: 'Phone-like pattern' },
