@@ -453,24 +453,34 @@ export const compressTimeline = (
     const errorCollector = new ErrorCollector();
 
     // Zero-trust guardrail: compression must never see raw PHI
-    const safeDocuments = documents.filter(doc => {
-      try {
-        assertScrubbed(doc.text);
-        return true;
-      } catch (error) {
-        errorCollector.add(new ParseError({
-          file: doc.filename,
-          field: "text",
-          expected: "ScrubbedText with placeholders (PII removed)",
-          actual: error instanceof Error ? error.message : "unsafe text",
-          suggestion: "A document was not scrubbed correctly and was skipped. This is likely an internal error.",
-          // Mark specifically as PHI policy violation for downstream handling
-          // Consumers of ErrorCollector can branch on this flag.
-          extra: { reason: "PHI_POLICY_VIOLATION_UNSCRUBBED" }
-        }));
-        return false;
+    const safeDocuments = (() => {
+      const unsafeDocs = [];
+      for (const doc of documents) {
+        try {
+          assertScrubbed(doc.text);
+        } catch (error) {
+          unsafeDocs.push({
+            file: doc.filename,
+            message: error instanceof Error ? error.message : "unsafe text",
+          });
+          errorCollector.add(new ParseError({
+            file: doc.filename,
+            field: "text",
+            expected: "ScrubbedText with placeholders (PII removed)",
+            actual: error instanceof Error ? error.message : "unsafe text",
+            suggestion: "Unscrubbed input detected. Aborting compression to prevent PHI leakage.",
+            extra: { reason: "PHI_POLICY_VIOLATION_UNSCRUBBED" }
+          }));
+        }
       }
-    });
+      if (unsafeDocs.length > 0) {
+        throw new CompressionError({
+          message: "Aborting: one or more documents are not scrubbed",
+          extra: { violations: unsafeDocs }
+        });
+      }
+      return documents;
+    })();
 
     // The rest of the function should use `safeDocuments` instead of `documents`.
     // For example, the first use is in STAGE 1:
