@@ -408,9 +408,6 @@ export const collectGarbage = (
       // Calculate relevance
       const relevance = yield* _(calculateRelevanceScore(doc.scrubbedText, doc.originalName));
 
-      // Attach metadata
-      (doc as any).relevanceScore = relevance;
-
       // Log details
       console.log(`📄 ${doc.originalName}:`);
       console.log(`   Score: ${relevance.score.toFixed(0)}/100`);
