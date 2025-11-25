@@ -1,3 +1,5 @@
+import { ScrubbedText } from './schemas/phi';
+
 export enum ProcessingStage {
   QUEUED = 'QUEUED',
   PARSING = 'PARSING',
@@ -14,7 +16,7 @@ export interface ProcessedFile {
   type: string;
   stage: ProcessingStage;
   rawText?: string;
-  scrubbedText?: string;
+  scrubbedText?: ScrubbedText;
   markdown?: string;
   error?: string;
   stats?: {
@@ -28,7 +30,7 @@ export interface PIIMap {
 }
 
 export interface ScrubResult {
-  text: string;
+  text: ScrubbedText;
   replacements: PIIMap;
   count: number;
   /** Confidence score (0-100) from multi-pass validation */
