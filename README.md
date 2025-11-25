@@ -168,8 +168,8 @@ Feed to Claude/GPT-4 for analysis
 
 ## 📚 Documentation
 
-- **[Timeline Usage Guide](TIMELINE_USAGE.md)** - How to use the timeline feature
-- **[Timeline Implementation Guide](TIMELINE_IMPLEMENTATION_GUIDE.md)** - Technical deep dive
+- **[Timeline Usage Guide](docs/TIMELINE_USAGE.md)** - How to use the timeline feature
+- **[Timeline Implementation Guide](docs/TIMELINE_IMPLEMENTATION_GUIDE.md)** - Technical deep dive
 - **[API Documentation](#-api-documentation)** - Service interfaces (below)
 
 ---
@@ -383,6 +383,4 @@ Built by [@Heyoub](https://github.com/Heyoub) for [@forgestack](https://forgesta
 
 ---
 
-|**Built with 🧠 for optimal LLM consumption**|
-
-© 2024 Forgestack.app
+© 2025 Forgestack.app
