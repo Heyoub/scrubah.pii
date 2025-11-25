@@ -33,6 +33,14 @@ export interface AuditSummary {
   startedAt: number;
   /** Timestamp when scrubbing completed */
   completedAt: number;
+  /** PII density: percentage of original text that was PII (0-100) */
+  piiDensityPercent: number;
+  /** Total characters of PII that were replaced */
+  piiCharactersRemoved: number;
+  /** Size change: negative means text got smaller (placeholders shorter than originals) */
+  sizeChangeBytes: number;
+  /** Average length of detected PII items */
+  averagePiiLength: number;
 }
 
 export interface AuditReport {
@@ -91,16 +99,35 @@ export class AuditCollector {
   /**
    * Generate summary statistics
    */
-  getSummary(confidenceScore: number, _scrubbedText: string): AuditSummary {
+  getSummary(confidenceScore: number, scrubbedText: string): AuditSummary {
     const byCategory: Record<string, number> = {};
     let totalDetections = 0;
     let totalDuration = 0;
+    let totalPiiCharacters = 0;
 
     for (const entry of this.entries) {
       byCategory[entry.patternType] = (byCategory[entry.patternType] || 0) + entry.matchCount;
       totalDetections += entry.matchCount;
       totalDuration += entry.durationMs || 0;
+
+      // Calculate total characters of PII removed
+      for (const replacement of entry.replacements) {
+        totalPiiCharacters += replacement.original.length;
+      }
     }
+
+    const scrubbedSize = scrubbedText.length;
+    const sizeChange = scrubbedSize - this.originalSize;
+
+    // PII density: what percentage of original text was PII
+    const piiDensity = this.originalSize > 0
+      ? (totalPiiCharacters / this.originalSize) * 100
+      : 0;
+
+    // Average PII item length
+    const avgPiiLength = totalDetections > 0
+      ? totalPiiCharacters / totalDetections
+      : 0;
 
     return {
       totalDetections,
@@ -108,7 +135,11 @@ export class AuditCollector {
       totalDurationMs: totalDuration || (Date.now() - this.startTime),
       confidenceScore,
       startedAt: this.startTime,
-      completedAt: Date.now()
+      completedAt: Date.now(),
+      piiDensityPercent: Math.round(piiDensity * 100) / 100,
+      piiCharactersRemoved: totalPiiCharacters,
+      sizeChangeBytes: sizeChange,
+      averagePiiLength: Math.round(avgPiiLength * 10) / 10
     };
   }
 
