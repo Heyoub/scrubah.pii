@@ -118,8 +118,10 @@ export const extractLabResults = (
   const results: LabResult[] = [];
 
   for (const [testName, pattern] of Object.entries(LAB_TEST_PATTERNS)) {
-    const match = text.match(pattern);
-    if (match) {
+    // Use matchAll to find ALL occurrences, not just the first
+    const matches = Array.from(text.matchAll(new RegExp(pattern, 'gi')));
+
+    for (const match of matches) {
       const value = match[1];
       const fullMatch = match[0];
 
