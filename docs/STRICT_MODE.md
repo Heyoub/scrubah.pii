@@ -9,13 +9,15 @@ we cannot enable `noImplicitAny: true` globally without causing compiler stack o
 ## The Problem
 
 When TypeScript tries to infer types through Effect's deep generic composition:
+
 - `Effect<R, E, A>` (three type parameters)
 - Service interfaces with Effect-returning methods
 - Layer composition (`Layer.Layer<Out, Error, In>`)
 - Generator-based `Effect.gen(function* (_) {...})`
 
 ...TypeScript's inference engine can enter infinite recursion, causing:
-```
+
+```yaml
 RangeError: Maximum call stack size exceeded
     at getContextualTypeForObjectLiteralMethod
     at checkThisExpression
@@ -26,53 +28,65 @@ RangeError: Maximum call stack size exceeded
 Instead of uniform strictness, we use **layered enforcement**:
 
 ### Layer 1: STRICT - Domain Modules (HIPAA-Critical)
+
 - `schemas/*.ts` - Data schemas and PHI types
 - `types.ts` - Core type definitions
 
 These modules have:
+
 - `@typescript-eslint/no-explicit-any: error`
 - `@typescript-eslint/no-unsafe-*: error`
 - Zero tolerance for `any` leakage
 
 ### Layer 2: MODERATE - Service Boundaries
+
 - `services/markdownFormatter.ts` - Final output
 - Other non-Effect services
 
 These modules have:
+
 - `@typescript-eslint/no-explicit-any: error`
 - Warnings for unsafe operations
 
 ### Layer 3: RELAXED - Effect Integration
+
 - `services/*.effect.ts` - Effect-TS code
 - `services/compression/*.ts` - Complex pipelines
 
 These modules:
+
 - Allow `any` where Effect types are involved
 - Safety enforced via branded types and runtime validation
 
 ## How Safety is Maintained
 
 ### 1. Branded PHI Types (`schemas/phi.ts`)
+
 ```typescript
 type RawPHI = string & { __brand: 'RawPHI' };
 type ScrubbedText = string & { __brand: 'ScrubbedText' };
 ```
+
 Compile-time tracking of PHI flow without complex inference.
 
 ### 2. Type Constructors
+
 ```typescript
 function markAsRawPHI(text: string): RawPHI
 function markAsScrubbed(text: string): ScrubbedText
 function assertScrubbed(text: string): ScrubbedText  // throws if PII detected
 ```
+
 Centralized points where PHI state changes.
 
 ### 3. Runtime Validation
+
 - Effect Schema validation at boundaries
 - `mightContainPII()` runtime checks
 - Multi-pass scrub verification
 
 ### 4. ESLint Enforcement
+
 See `eslint.config.js` for layer-specific rules.
 
 ## TSConfig Settings
@@ -92,6 +106,7 @@ See `eslint.config.js` for layer-specific rules.
 ## Known Workarounds
 
 ### Factory Pattern (Avoid `this` in Effect)
+
 ```typescript
 // BAD: Class with this + Effect.gen causes inference explosion
 class Service {
@@ -110,6 +125,7 @@ function createService(): Service {
 ```
 
 ### Explicit Type Annotations
+
 ```typescript
 // Pin types at boundaries to stop inference recursion
 const effect: Effect.Effect<Output, Error, Deps> = Effect.gen(function* (_) {
@@ -118,6 +134,7 @@ const effect: Effect.Effect<Output, Error, Deps> = Effect.gen(function* (_) {
 ```
 
 ### Chunked Pipelines
+
 ```typescript
 // BAD: One giant pipe expression
 return input.pipe(step1, step2, step3, step4, step5);

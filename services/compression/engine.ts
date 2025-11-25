@@ -37,6 +37,7 @@ import {
   DateAmbiguityError,
   DeduplicationError,
   CompressionSizeExceededError,
+  ValidationError,
   ErrorCollector,
 } from "./errors";
 
@@ -455,9 +456,12 @@ export const compressTimeline = (
     // Zero-trust guardrail: compression must never see raw PHI
     const safeDocuments = (() => {
       if (!Array.isArray(documents)) {
-        throw new CompressionError({
-          message: "Invalid input: documents must be an array",
-          extra: { actualType: typeof documents },
+        throw new ValidationError({
+          field: "documents",
+          value: documents,
+          constraint: "must be an array of ProcessedDocument",
+          suggestion:
+            "Pass an array of ProcessedDocument to compressTimeline.",
         });
       }
 
@@ -488,9 +492,12 @@ export const compressTimeline = (
       }
 
       if (unsafeDocs.length > 0) {
-        throw new CompressionError({
-          message: "Aborting: one or more documents are not scrubbed",
-          extra: { violations: unsafeDocs },
+        throw new ValidationError({
+          field: "documents",
+          value: unsafeDocs,
+          constraint: "all documents must be scrubbed (ScrubbedText)",
+          suggestion:
+            "Run the scrubbing pipeline before compression so raw PHI is removed.",
         });
       }
 
