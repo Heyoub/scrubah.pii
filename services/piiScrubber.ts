@@ -684,6 +684,10 @@ class PiiScrubberService {
     for (const match of allCapsMatches) {
       if (isPlaceholder(match)) continue;
 
+      // Skip if all words are whitelisted acronyms (e.g., "CHIEF COMPLAINT", "VITAL SIGNS")
+      const words = match.replace(/,/g, '').split(/\s+/).filter(Boolean);
+      if (words.every(word => WHITELIST_ACRONYMS.has(word))) continue;
+
       if (!entityToPlaceholder[match]) {
         counters.PER++;
         const placeholder = `[PER_${counters.PER}]`;
