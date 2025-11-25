@@ -188,7 +188,9 @@ const App: React.FC = () => {
     setIsGeneratingTimeline(true);
 
     try {
-      console.log(`📊 Generating master timeline from ${completedFiles.length} documents...`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`📊 Generating master timeline from ${completedFiles.length} documents...`);
+      }
       const timeline = await buildMasterTimeline(completedFiles);
 
       // Download automatically
@@ -200,8 +202,10 @@ const App: React.FC = () => {
       a.click();
       URL.revokeObjectURL(url);
 
-      console.log('✅ Master timeline generated successfully!');
-      console.log(`📈 Stats: ${timeline.summary.totalDocuments} total, ${timeline.summary.uniqueDocuments} unique, ${timeline.summary.duplicates} duplicates`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('✅ Master timeline generated successfully!');
+        console.log(`📈 Stats: ${timeline.summary.totalDocuments} total, ${timeline.summary.uniqueDocuments} unique, ${timeline.summary.duplicates} duplicates`);
+      }
 
     } catch (error) {
       console.error('Error generating timeline:', error);

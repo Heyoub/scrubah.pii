@@ -88,7 +88,7 @@ const file = decodeProcessedFile(untrustedData);
 ### Core Technologies
 
 | Technology | Purpose | Why? |
-|------------|---------|------|
+| ---------- | ------- | ---- |
 | **Effect-TS** | Functional effects system | Type-safe error handling, dependency injection |
 | **Effect Schema** | Runtime validation | Prevents invalid states at runtime |
 | **Transformers.js** | ML inference (BERT NER) | WASM-based PII detection, local processing |
@@ -106,7 +106,7 @@ const file = decodeProcessedFile(untrustedData);
 
 ## Project Structure
 
-```
+```shell
 scrubah.pii/
 ├── schemas.ts                    # SINGLE SOURCE OF TRUTH - All types with runtime validation
 ├── schemas/
@@ -191,6 +191,7 @@ export const ScrubResultSchema = pipe(
 ```
 
 **This prevents**:
+
 - `count: 5` with only 2 replacements
 - `count: 0` with non-empty replacements map
 - Invalid audit trails
@@ -205,6 +206,7 @@ npm test schemas.test.ts
 ```
 
 Tests cover:
+
 - Valid data passes
 - Invalid data fails with correct error messages
 - S.filter() invariants enforce business rules
@@ -252,7 +254,7 @@ export class MLModelError extends Data.TaggedError("MLModelError")<{
 ### Error Categories
 
 | Error Type | Recoverable? | Use Case |
-|------------|--------------|----------|
+| ---------- | ------------ | -------- |
 | `ValidationError` | ❌ No | Schema validation failed |
 | `MLModelError` | ✅ Yes (if fallback used) | BERT NER inference failed |
 | `PIIDetectionWarning` | ✅ Yes | Low confidence PII detection |
@@ -455,7 +457,7 @@ sendToAPI(rawPHI);  // ❌ Type error: RawPHI is not assignable to ScrubbedText
 
 ### Test Hierarchy
 
-```
+```shell
 ├── Unit Tests                    # Pure function tests
 │   ├── schemas.test.ts          # 51 tests - Schema validation
 │   └── services/*.test.ts       # Service-specific tests

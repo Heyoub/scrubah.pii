@@ -297,7 +297,9 @@ class PiiScrubberService {
           'Xenova/bert-base-NER',
           { quantized: true } as any
         );
-        console.log("NER Model loaded successfully");
+        if (process.env.NODE_ENV !== 'production') {
+          console.log("NER Model loaded successfully");
+        }
       } catch (err) {
         console.error("Failed to load NER model", err);
         this.loadPromise = null; // Reset so it can be retried
@@ -451,7 +453,9 @@ class PiiScrubberService {
     // --- PHASE 3: ML INFERENCE ---
     // Skip ML inference if regexOnly mode is enabled (for testing/fast scrubbing)
     if (regexOnly) {
-      console.log('⚡ Regex-only mode: skipping ML inference');
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('⚡ Regex-only mode: skipping ML inference');
+      }
       const finalScrubbedText = chunks.join('');
 
       // Run secondary validation pass even in regex-only mode
@@ -473,14 +477,16 @@ class PiiScrubberService {
 
     let finalScrubbedText = '';
 
-    console.log(`🔍 Processing ${chunks.length} chunks for PII detection...`);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`🔍 Processing ${chunks.length} chunks for PII detection...`);
+    }
     const startTime = performance.now();
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
 
       // Progress indicator for large documents
-      if (chunks.length > 10 && i % 5 === 0) {
+      if (process.env.NODE_ENV !== 'production' && chunks.length > 10 && i % 5 === 0) {
         console.log(`⏳ Progress: ${i}/${chunks.length} chunks (${Math.round(i/chunks.length*100)}%)`);
       }
       if (!chunk.trim()) {
@@ -549,11 +555,15 @@ class PiiScrubberService {
     }
 
     const _processingTime = ((performance.now() - startTime) / 1000).toFixed(2);
-    console.log(`✅ Pass 1 (Primary) complete: ${totalReplacements} entities redacted`);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`✅ Pass 1 (Primary) complete: ${totalReplacements} entities redacted`);
+    }
 
     // --- PHASE 4: SECONDARY VALIDATION PASS ---
     // Catch anything that slipped through with broader patterns
-    console.log(`🔍 Running Pass 2 (Validation)...`);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`🔍 Running Pass 2 (Validation)...`);
+    }
     const { text: validatedText, additionalReplacements: _additionalReplacements, additionalCount } = this.secondaryValidationPass(
       finalScrubbedText,
       entityToPlaceholder,
@@ -562,7 +572,9 @@ class PiiScrubberService {
     );
 
     const totalSecondPassReplacements = totalReplacements + additionalCount;
-    console.log(`✅ Pass 2 complete: ${additionalCount} additional entities caught`);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`✅ Pass 2 complete: ${additionalCount} additional entities caught`);
+    }
 
     // --- PHASE 5: VERIFICATION ---
     // Final check to ensure no suspicious patterns remain
@@ -574,8 +586,10 @@ class PiiScrubberService {
     }
 
     const totalProcessingTime = ((performance.now() - startTime) / 1000).toFixed(2);
-    console.log(`✅ All passes complete in ${totalProcessingTime}s`);
-    console.log(`📊 Total: ${totalSecondPassReplacements} entities | Confidence: ${validation.confidenceScore.toFixed(1)}%`);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`✅ All passes complete in ${totalProcessingTime}s`);
+      console.log(`📊 Total: ${totalSecondPassReplacements} entities | Confidence: ${validation.confidenceScore.toFixed(1)}%`);
+    }
 
     // HIPAA COMPLIANCE: Mark output as scrubbed (type-safe)
     // This is the ONLY place ScrubbedText can be created
