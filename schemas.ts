@@ -351,23 +351,34 @@ export const LabFlagSchema = S.Literal("H", "L", "N", "A");
 export type LabFlag = S.Schema.Type<typeof LabFlagSchema>;
 
 /**
+ * LAB RESULT STATUS (Human-readable status indicator)
+ *
+ * OCaml equivalent:
+ * type lab_status = Normal | High | Low | Critical
+ */
+export const LabStatusSchema = S.Literal("Normal", "High", "Low", "Critical");
+export type LabStatus = S.Schema.Type<typeof LabStatusSchema>;
+
+/**
  * LAB RESULT (Individual test result)
  *
  * OCaml equivalent:
  * type lab_result = {
- *   test: string;
+ *   testName: string;
  *   value: string;
- *   unit: string option;
+ *   unit: string;
  *   reference_range: string option;
- *   flag: lab_flag option;
+ *   status: lab_status option;
+ *   date: string;
  * }
  */
 export const LabResultSchema = S.Struct({
-  test: pipe(S.String, S.minLength(1)),
+  testName: pipe(S.String, S.minLength(1)),
   value: S.String,
-  unit: S.optional(S.String),
+  unit: S.String,
   referenceRange: S.optional(S.String),
-  flag: S.optional(LabFlagSchema),
+  status: S.optional(LabStatusSchema),
+  date: S.String,
 });
 export type LabResult = S.Schema.Type<typeof LabResultSchema>;
 
@@ -377,9 +388,8 @@ export type LabResult = S.Schema.Type<typeof LabResultSchema>;
  * OCaml equivalent:
  * type lab_panel = {
  *   panel_name: string;
- *   date: string option;
+ *   date: string;
  *   results: lab_result list;
- *   raw_text: string;
  * }
  *
  * Invariant: results list is non-empty
@@ -387,9 +397,8 @@ export type LabResult = S.Schema.Type<typeof LabResultSchema>;
 export const LabPanelSchema = pipe(
   S.Struct({
     panelName: pipe(S.String, S.minLength(1)),
-    date: S.optional(S.String),
+    date: S.String,
     results: S.Array(LabResultSchema),
-    rawText: S.String,
   }),
   S.filter(
     (panel) => panel.results.length > 0,
@@ -415,33 +424,37 @@ export type LabPanel = S.Schema.Type<typeof LabPanelSchema>;
  *   display_date: string;
  *   content: string;
  *   fingerprint: document_fingerprint;
- *   duplication_info: duplicate_analysis option;
+ *   mutable duplication_info: duplicate_analysis option;
  *   lab_data: lab_panel option;
- *   document_number: int;
+ *   mutable document_number: int;
  * }
  *
- * Invariant: document_number is positive
+ * Note: Some fields are mutable to allow timeline construction
  */
-export const TimelineDocumentSchema = pipe(
-  S.Struct({
-    id: pipe(S.String, S.minLength(1)),
-    filename: pipe(S.String, S.minLength(1)),
-    date: S.Date,
-    displayDate: S.String,
-    content: S.String,
-    fingerprint: DocumentFingerprintSchema,
-    duplicationInfo: S.optional(DuplicateAnalysisSchema),
-    labData: S.optional(LabPanelSchema),
-    documentNumber: S.Int,
-  }),
-  S.filter(
-    (doc) => doc.documentNumber > 0,
-    {
-      message: () => "Document number must be positive",
-    }
-  )
-);
-export type TimelineDocument = S.Schema.Type<typeof TimelineDocumentSchema>;
+export const TimelineDocumentSchema = S.Struct({
+  id: pipe(S.String, S.minLength(1)),
+  filename: pipe(S.String, S.minLength(1)),
+  date: S.Date,
+  displayDate: S.String,
+  content: S.String,
+  fingerprint: DocumentFingerprintSchema,
+  duplicationInfo: S.optional(DuplicateAnalysisSchema),
+  labData: S.optional(LabPanelSchema),
+  documentNumber: S.Int,
+});
+
+// Export mutable version for service usage (Effect schemas are readonly by default)
+export interface TimelineDocument {
+  readonly id: string;
+  readonly filename: string;
+  readonly date: Date;
+  readonly displayDate: string;
+  readonly content: string;
+  readonly fingerprint: DocumentFingerprint;
+  duplicationInfo?: DuplicateAnalysis; // Mutable - assigned during deduplication
+  readonly labData?: LabPanel;
+  documentNumber: number; // Mutable - assigned during sorting
+}
 
 /**
  * TIMELINE SUMMARY (Aggregated statistics)
@@ -516,35 +529,48 @@ export const AuditPhaseSchema = S.Literal("regex", "ml", "validation");
 export type AuditPhase = S.Schema.Type<typeof AuditPhaseSchema>;
 
 /**
- * AUDIT ENTRY (Single PII detection record)
+ * REPLACEMENT PAIR (Original PII value and its placeholder)
+ *
+ * OCaml equivalent:
+ * type replacement = {
+ *   original: string;
+ *   placeholder: string;
+ * }
+ */
+export const ReplacementPairSchema = S.Struct({
+  original: S.String,
+  placeholder: S.String,
+});
+export type ReplacementPair = S.Schema.Type<typeof ReplacementPairSchema>;
+
+/**
+ * AUDIT ENTRY (Pattern-level PII detection record)
  *
  * OCaml equivalent:
  * type audit_entry = {
+ *   pattern_type: string;
+ *   pattern_name: string;
+ *   match_count: int;
+ *   replacements: replacement list;
  *   timestamp: int;
- *   phase: audit_phase;
- *   category: string;
- *   original: string;
- *   placeholder: string;
- *   confidence: float;
- *   context: string option;
+ *   duration_ms: int option;
  * }
  *
- * Invariant: confidence is between 0.0 and 1.0
+ * Invariant: match_count = length(replacements)
  */
 export const AuditEntrySchema = pipe(
   S.Struct({
+    patternType: S.String,
+    patternName: S.String,
+    matchCount: pipe(S.Int, S.greaterThanOrEqualTo(0)),
+    replacements: S.Array(ReplacementPairSchema),
     timestamp: S.Number,
-    phase: AuditPhaseSchema,
-    category: S.String,
-    original: S.String,
-    placeholder: S.String,
-    confidence: S.Number,
-    context: S.optional(S.String),
+    durationMs: S.optional(S.Number),
   }),
   S.filter(
-    (entry) => entry.confidence >= 0 && entry.confidence <= 1,
+    (entry) => entry.matchCount === entry.replacements.length,
     {
-      message: () => "Confidence must be between 0.0 and 1.0",
+      message: () => "Match count must equal the number of replacements",
     }
   )
 );
