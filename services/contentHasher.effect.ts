@@ -191,7 +191,7 @@ export const detectDocumentType = (filename: string, text: string): DocumentType
 export const generateFingerprint = (
   filename: string,
   scrubbedText: string
-): Effect.Effect<DocumentFingerprint, ValidationError, never> =>
+): Effect.Effect<DocumentFingerprint, never, never> =>
   pipe(
     generateContentHash(scrubbedText),
     Effect.map((contentHash) => {
@@ -200,7 +200,7 @@ export const generateFingerprint = (
       const dateReferences = extractDates(scrubbedText);
       const documentType = detectDocumentType(filename, scrubbedText);
 
-      // Return the fingerprint object (schemas validate the type structure)
+      // Return the fingerprint object (type structure is guaranteed by TypeScript)
       const fingerprint: DocumentFingerprint = {
         contentHash,
         simHash,
@@ -211,8 +211,7 @@ export const generateFingerprint = (
 
       return fingerprint;
     })
-    // Runtime validation happens at type level via DocumentFingerprint type
-    // For explicit validation, we would use Effect.flatMap with schema decode
+    // This is an infallible computation - error type is never
   );
 
 // ============================================================================

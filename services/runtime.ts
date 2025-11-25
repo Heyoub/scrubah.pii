@@ -74,7 +74,8 @@ const AppLayer = Logger.replace(Logger.defaultLogger, AppLogger);
 /**
  * Default runtime with app layer
  *
- * Note: Log level is configured via Logger.replace above
+ * Note: Custom logger is automatically applied via Logger.replace
+ * For ManagedRuntime usage, see Effect.provide(AppLayer) in helpers
  */
 const AppRuntime = Runtime.defaultRuntime;
 
@@ -103,6 +104,7 @@ export const runPromise = <A, E>(
 ): Promise<{ success: true; data: A } | { success: false; error: E }> => {
   return Effect.runPromise(
     effect.pipe(
+      Effect.provide(AppLayer),  // Apply custom logger
       Effect.map((data) => ({ success: true as const, data })),
       Effect.catchAll((error) =>
         Effect.succeed({ success: false as const, error })
@@ -147,6 +149,7 @@ export const runSyncResult = <A, E>(
 ): { success: true; data: A } | { success: false; error: E } => {
   return Effect.runSync(
     effect.pipe(
+      Effect.provide(AppLayer),  // Apply custom logger
       Effect.map((data) => ({ success: true as const, data })),
       Effect.catchAll((error) =>
         Effect.succeed({ success: false as const, error })
@@ -202,6 +205,11 @@ export const runWithRetry = async <A, E extends { recoverable: boolean }>(
   effect: Effect.Effect<A, E, never>,
   options: { attempts: number; delayMs: number }
 ): Promise<{ success: true; data: A } | { success: false; error: E }> => {
+  // Validate attempts
+  if (options.attempts <= 0) {
+    throw new Error("Retry attempts must be greater than 0");
+  }
+
   let lastError: E | undefined;
 
   for (let attempt = 1; attempt <= options.attempts; attempt++) {
@@ -230,7 +238,8 @@ export const runWithRetry = async <A, E extends { recoverable: boolean }>(
   }
 
   console.error(`❌ All ${options.attempts} attempts failed`);
-  return { success: false, error: lastError! };
+  // lastError is guaranteed to be defined here since we validated attempts > 0
+  return { success: false, error: lastError as E };
 };
 
 // ============================================================================
