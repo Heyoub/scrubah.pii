@@ -142,7 +142,7 @@ class ScrubberWorkerManager {
   }
 
   /**
-   * Process multiple documents in parallel using the worker
+   * Process multiple documents sequentially using the worker
    */
   async scrubBatch(
     documents: Array<{ text: string; filename: string }>,
