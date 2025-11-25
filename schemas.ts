@@ -479,10 +479,10 @@ export const TimelineSummarySchema = pipe(
       earliest: S.String,
       latest: S.String,
     }),
-    documentTypes: S.Record({
-      key: DocumentTypeSchema,
-      value: pipe(S.Int, S.greaterThanOrEqualTo(0)),
-    }),
+    documentTypes: S.Record(
+      DocumentTypeSchema,
+      pipe(S.Int, S.greaterThanOrEqualTo(0))
+    ),
   }),
   S.filter(
     (summary) =>
