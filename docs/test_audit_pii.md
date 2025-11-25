@@ -11,7 +11,7 @@ Dr. Sarah Davis
 
 ## Contact Information
 
-Email: john.smith@example.com
+Email: <john.smith@example.com>
 Phone: (555) 123-4567
 Mobile: 555-987-6543
 
@@ -51,6 +51,7 @@ Member ID: INS987654
 ## Structured Formats
 
 **JSON-like:**
+
 ```json
 {
   "patientName": "Alice Brown",
@@ -62,10 +63,11 @@ Member ID: INS987654
 
 **CSV-like:**
 Name,Address,Phone,Email
-"Michael Green","654 River Road, Seattle, WA 98101","206-555-5678","michael.g@test.com"
-"Jennifer White","987 Mountain View, Denver, CO 80201","303-555-9012","jen.white@example.org"
+"Michael Green","654 River Road, Seattle, WA 98101","206-555-5678","<michael.g@test.com>"
+"Jennifer White","987 Mountain View, Denver, CO 80201","303-555-9012","<jen.white@example.org>"
 
 **XML-like:**
+
 ```xml
 <Patient>
   <Name>David Lee</Name>

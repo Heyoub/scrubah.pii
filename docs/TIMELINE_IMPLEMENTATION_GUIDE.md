@@ -1,11 +1,13 @@
 # Master Timeline Implementation Guide
 
 ## 🎯 Goal
+
 Transform Scrubah from a **document-level PII scrubber** into a **temporal medical record compiler** optimized for frontier LLM analysis (Claude, GPT-4, etc.).
 
 ## 🧠 Why This Architecture
 
 ### Problem with Current Approach
+
 - Each PDF becomes a separate markdown file
 - No deduplication (multiple copies of same lab report)
 - No temporal ordering (records scattered by filename)
@@ -15,6 +17,7 @@ Transform Scrubah from a **document-level PII scrubber** into a **temporal medic
 ### How Frontier Models Actually Work
 
 **Attention Patterns:**
+
 - First 10% of context: ~80% attention weight
 - Middle 50%: ~15% attention weight
 - Last 40%: ~5% attention weight
@@ -22,13 +25,15 @@ Transform Scrubah from a **document-level PII scrubber** into a **temporal medic
 **Implication**: Critical information (summaries, trends, timelines) must be at the top.
 
 **Tokenization Reality:**
-```
+
+```shell
 "Hemoglobin: 13.2 g/dL" → 8-10 tokens (prose)
 | HGB | 13.2 g/dL | ✅ Normal | → 6 tokens (table)
 ```
 
 **Cross-Document Reasoning:**
 LLMs excel at pattern detection when information is:
+
 1. **Chronologically ordered** (enables causal inference)
 2. **Cross-referenced** (enables relationship mapping)
 3. **Deduplicated** (reduces noise-to-signal ratio)
@@ -40,13 +45,16 @@ LLMs excel at pattern detection when information is:
 I've built **three new services** that work together:
 
 ### 1. **Content Hasher** (`services/contentHasher.ts`)
+
 **What it does:**
+
 - Generates SHA-256 hash of document content (ignoring PII placeholders)
 - Creates SimHash for fuzzy duplicate detection (95%+ similarity)
 - Extracts date references and document type classification
 - Detects: exact duplicates, near-duplicates, same-event-different-report
 
 **Example:**
+
 ```typescript
 const fingerprint = await generateFingerprint(filename, scrubbedText);
 // {
@@ -58,13 +66,16 @@ const fingerprint = await generateFingerprint(filename, scrubbedText);
 ```
 
 ### 2. **Lab Extractor** (`services/labExtractor.ts`)
+
 **What it does:**
+
 - Parses unstructured lab reports with regex patterns
 - Extracts: test name, value, unit, reference range, status
 - Generates token-efficient markdown tables
 - Creates trend analysis (comparing current vs previous labs)
 
 **Example Output:**
+
 ```markdown
 ### 🧪 Complete Blood Count (CBC)
 **Date**: 10/23/2025
@@ -83,7 +94,9 @@ const fingerprint = await generateFingerprint(filename, scrubbedText);
 **Token Savings**: ~40% fewer tokens than prose format.
 
 ### 3. **Timeline Organizer** (`services/timelineOrganizer.ts`)
+
 **What it does:**
+
 - Sorts all documents chronologically by extracted date
 - Detects duplicates using content hashing
 - Generates master timeline with:
@@ -94,6 +107,7 @@ const fingerprint = await generateFingerprint(filename, scrubbedText);
   - Collapsible sections for verbose content
 
 **Example Output:**
+
 ```markdown
 # 🏥 Medical Record Timeline
 
@@ -208,15 +222,18 @@ db.version(2).stores({
 Since you have an older i7 + GTX 1060:
 
 ### Content Hashing is Fast
+
 - SHA-256: Native Web Crypto API (hardware accelerated)
 - SimHash: Simple bit operations, ~1-2ms per document
 - **No GPU needed**
 
 ### Lab Extraction is Fast
+
 - Regex-based parsing, ~5-10ms per document
 - Pre-compiled patterns
 
 ### Timeline Generation
+
 - Single-pass sort: O(n log n)
 - For 100 documents: ~50-100ms total
 
@@ -229,7 +246,8 @@ Since you have an older i7 + GTX 1060:
 ### For Frontier Model Analysis
 
 **Before (current approach):**
-```
+
+```shell
 Token count for 100 lab reports: ~150,000 tokens
 Duplicate information: ~40% redundancy
 Attention on key findings: Low (buried in middle)
@@ -237,7 +255,8 @@ Cross-document reasoning: Difficult (no links)
 ```
 
 **After (timeline approach):**
-```
+
+```shell
 Token count: ~90,000 tokens (40% reduction!)
 Duplicate information: Marked and skipped
 Attention on key findings: High (summary at top)
@@ -247,6 +266,7 @@ Cross-document reasoning: Enabled (explicit links)
 ### For Pathological Analysis
 
 A pathologist reviewing this timeline can:
+
 1. **Track disease progression** (chronological order)
 2. **Spot trends** (automated lab comparisons)
 3. **Identify contradictions** (cross-references)
@@ -270,11 +290,13 @@ A **frontier LLM does the exact same thing** when given this format.
 ### Why SimHash Over Exact Hashing?
 
 **Problem**: Two versions of same report might have:
+
 - Different timestamps
 - Minor formatting changes
 - OCR artifacts
 
 **SimHash Solution**:
+
 - Generates 64-bit "fuzzy" fingerprint
 - Hamming distance measures similarity
 - 95% threshold catches near-duplicates while avoiding false positives
@@ -282,7 +304,8 @@ A **frontier LLM does the exact same thing** when given this format.
 ### Why Tables Over Prose for Labs?
 
 **Token Analysis:**
-```
+
+```shell
 Prose: "The patient's white blood cell count was 8.5 thousand per microliter, which is within normal limits (reference range 4.0-11.0)."
 Tokens: ~28 tokens
 
@@ -293,6 +316,7 @@ Savings: 57% token reduction
 ```
 
 **Attention Analysis:**
+
 - Tables trigger structured data parsing in transformers
 - Better positional encoding for numerical values
 - Easier trend detection across rows
@@ -300,13 +324,15 @@ Savings: 57% token reduction
 ### Why Chronological Order Matters
 
 **Causal Inference in Transformers:**
-```
+
+```shell
 Sequential: A → B → C (model infers A causes C via B)
 Random: C, A, B (model treats as independent observations)
 ```
 
 **Example:**
-```
+
+```shell
 Timeline order:
 1. CT scan: New pulmonary nodule
 2. Biopsy ordered
@@ -346,4 +372,4 @@ A: Yes! Timeline is additive. Individual exports still work.
 
 ---
 
-**Built with 🧠 and ☕ for optimal LLM consumption**
+|**Built with 🧠 and ☕ for optimal LLM consumption**
