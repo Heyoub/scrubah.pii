@@ -230,24 +230,13 @@ if (similarity >= 0.95) {  // ← Change this
 - Simple regex patterns (no ML inference)
 - Efficient sorting algorithms (O(n log n))
 
-## 🎓 Battle-Tested Stack
+## Stack
 
-We leveraged your existing tools + added:
-
-### What We Use
-
-- ✅ **Web Crypto API** (native) - SHA-256 hashing
-- ✅ **date-fns** (battle-tested) - Robust date parsing
-- ✅ **Dexie** (your existing) - IndexedDB for persistence
-- ✅ **JSZip** (your existing) - Bundle individual files
-- ✅ **React 18** (your existing) - UI framework
-
-### What We Didn't Need
-
-- ❌ External deduplication services
-- ❌ Cloud APIs
-- ❌ Complex NLP libraries
-- ❌ Additional ML models
+- **Web Crypto API** (native) - SHA-256 hashing
+- **date-fns** - Robust date parsing
+- **Dexie** - IndexedDB for persistence
+- **JSZip** - Bundle individual files
+- **React 18** - UI framework
 
 Everything runs **100% locally in your browser**.
 
@@ -315,6 +304,4 @@ Now that you have the timeline feature:
 
 ---
 
-**Questions?** Check console logs for debugging info!
-
-|**Built with 🧠 for optimal LLM consumption**
+**Questions?** Check console logs for debugging info.

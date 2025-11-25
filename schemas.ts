@@ -224,10 +224,7 @@ export const markError = (
 });
 
 /**
- * LEGACY COMPATIBILITY
- *
- * Re-export as enum for existing code.
- * TODO: Remove once all code uses schemas.
+ * Enum-style export for convenience.
  */
 export const ProcessingStage = {
   QUEUED: "QUEUED" as const,

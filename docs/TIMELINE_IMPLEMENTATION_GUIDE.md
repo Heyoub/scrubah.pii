@@ -42,7 +42,7 @@ LLMs excel at pattern detection when information is:
 
 ## 🏗️ New Architecture
 
-I've built **three new services** that work together:
+**Three services** work together:
 
 ### 1. **Content Hasher** (`services/contentHasher.ts`)
 
@@ -370,6 +370,3 @@ A: Should work. Timeline generation is O(n log n). For 1000 docs: ~2-3 seconds.
 **Q: Can I still download individual files?**
 A: Yes! Timeline is additive. Individual exports still work.
 
----
-
-|**Built with 🧠 and ☕ for optimal LLM consumption**
