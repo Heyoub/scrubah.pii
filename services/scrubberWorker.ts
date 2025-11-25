@@ -54,7 +54,7 @@ class ScrubberWorkerManager {
       this.worker.onerror = (error) => {
         console.error('Worker error:', error);
         // Reject all pending jobs
-        for (const [jobId, job] of this.pendingJobs) {
+        for (const [_jobId, job] of this.pendingJobs) {
           job.reject(new Error('Worker error: ' + error.message));
         }
         this.pendingJobs.clear();
