@@ -229,16 +229,31 @@ const App: React.FC = () => {
     try {
       console.log(`🗜️ Compressing ${completedFiles.length} documents...`);
 
-      // Convert ProcessedFile to ProcessedDocument format
-      const documents: ProcessedDocument[] = completedFiles.map(f => ({
-        id: f.id,
-        filename: f.originalName,
-        // scrubbedText is guaranteed by the processing stage filter above
-        text: f.scrubbedText!,
-        metadata: {
-          documentType: f.type,
+      // Convert ProcessedFile to ProcessedDocument format with runtime guard
+      const documents: ProcessedDocument[] = [];
+      for (const f of completedFiles) {
+        const text = f.scrubbedText;
+        if (!text) {
+          console.warn(`Missing scrubbed text for file: ${f.originalName}`);
+          continue;
         }
-      }));
+
+        documents.push({
+          id: f.id,
+          filename: f.originalName,
+          // Branding/validation occurs in the compression layer
+          text: text as any,
+          metadata: {
+            documentType: f.type,
+          }
+        });
+      }
+
+      if (documents.length === 0) {
+        alert('No valid scrubbed documents available for compression.');
+        setIsCompressing(false);
+        return;
+      }
 
       // Run compression with progress callback
       const result = await runCompression(documents, {
