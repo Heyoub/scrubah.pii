@@ -2,13 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../App';
+import { markAsScrubbed } from '../schemas/phi';
 
 // Mock external dependencies
 vi.mock('../services/piiScrubber', () => ({
   piiScrubber: {
     loadModel: vi.fn().mockResolvedValue(undefined),
     scrub: vi.fn().mockResolvedValue({
-      text: 'Patient [PER_1] visited on [DATE_1].',
+      // Cast to ScrubbedText for type safety - in tests this is acceptable
+      text: 'Patient [PER_1] visited on [DATE_1].' as ReturnType<typeof import('../schemas/phi').markAsScrubbed>,
       replacements: {
         'John Doe': '[PER_1]',
         '01/15/2024': '[DATE_1]',
@@ -207,7 +209,7 @@ describe('Integration Tests - Full Workflow', () => {
     // Make scrubbing take some time
     vi.mocked(piiScrubber.scrub).mockImplementation(
       () => new Promise((resolve) => setTimeout(() => resolve({
-        text: 'Scrubbed text',
+        text: markAsScrubbed('Scrubbed text'),
         replacements: {},
         count: 0,
       }), 100))
@@ -324,7 +326,7 @@ describe('Integration Tests - Full Workflow', () => {
     const { piiScrubber } = await import('../services/piiScrubber');
 
     vi.mocked(piiScrubber.scrub).mockResolvedValue({
-      text: 'Scrubbed content',
+      text: markAsScrubbed('Scrubbed content'),
       replacements: { a: 'b', c: 'd', e: 'f' },
       count: 5,
     });

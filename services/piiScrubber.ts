@@ -6,7 +6,10 @@ import { markAsScrubbed, mightContainPII } from '../schemas/phi';
 env.allowLocalModels = false;
 env.useBrowserCache = true;
 
-const TARGET_ENTITIES = ['PER', 'LOC', 'ORG'];
+const TARGET_ENTITIES = ['PER', 'LOC', 'ORG'] as const;
+
+/** Counter state for placeholder numbering */
+type EntityCounters = Record<'PER' | 'LOC' | 'ORG' | 'EMAIL' | 'PHONE' | 'ID' | 'DATE', number>;
 
 // Regex patterns for Hybrid Scrubbing (Presidio-style pre-pass)
 const PATTERNS = {
@@ -210,7 +213,7 @@ class PiiScrubberService {
 
     // Context consistency map
     const entityToPlaceholder: Record<string, string> = {};
-    const counters = { PER: 0, LOC: 0, ORG: 0, EMAIL: 0, PHONE: 0, ID: 0, DATE: 0 };
+    const counters: EntityCounters = { PER: 0, LOC: 0, ORG: 0, EMAIL: 0, PHONE: 0, ID: 0, DATE: 0 };
 
     // --- PHASE 1: REGEX PRE-PASS ---
     // We replace structural PII first to prevent BERT from getting confused or splitting them.
@@ -303,8 +306,9 @@ class PiiScrubberService {
         globalReplacements
       );
 
+      // HIPAA COMPLIANCE: Mark regex-only output as scrubbed
       return {
-        text: validatedText,
+        text: markAsScrubbed(validatedText),
         replacements: globalReplacements,
         count: Object.keys(globalReplacements).length,
       };
@@ -426,7 +430,7 @@ class PiiScrubberService {
     }
 
     return {
-      text: scrubbedOutput as unknown as string, // Cast for backwards compatibility
+      text: scrubbedOutput,
       replacements: globalReplacements,
       count: totalSecondPassReplacements,
       confidence: validation.confidenceScore
@@ -454,7 +458,7 @@ class PiiScrubberService {
   private secondaryValidationPass(
     text: string,
     entityToPlaceholder: Record<string, string>,
-    counters: any,
+    counters: EntityCounters,
     globalReplacements: PIIMap
   ): { text: string; additionalReplacements: PIIMap; additionalCount: number } {
     let validatedText = text;

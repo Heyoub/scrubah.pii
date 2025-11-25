@@ -12,6 +12,7 @@ import {
   RelevanceScoreSchema
 } from './medicalRelevanceFilter';
 import { ProcessedFile, ProcessingStage } from '../types';
+import { markAsScrubbed } from '../schemas/phi';
 
 /**
  * TEST FIXTURES - Realistic medical document samples
@@ -144,7 +145,7 @@ const createTestDoc = (filename: string, scrubbedText: string): ProcessedFile =>
   size: scrubbedText.length,
   type: 'application/pdf',
   stage: ProcessingStage.COMPLETED,
-  scrubbedText
+  scrubbedText: markAsScrubbed(scrubbedText)
 });
 
 describe('Medical Relevance Filter - Garbage Collection', () => {
