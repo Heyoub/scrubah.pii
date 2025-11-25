@@ -290,11 +290,13 @@ function scrubText(
       const placeholder = `[PER_${counters.PER}]`;
       entityToPlaceholder[matched] = placeholder;
       totalReplacements++;
-      labeledNameMatches.push({ original: matched, placeholder });
-      // Replace in text
-      interimText = interimText.substring(0, start) + placeholder + interimText.substring(start + matched.length);
+      labeledNameMatches.push({ original: matched, placeholder, start });
     }
   }
+  // Apply replacements in reverse order to preserve indices
+  labeledNameMatches.sort((a, b) => b.start - a.start).forEach(({ original, placeholder, start }) => {
+    interimText = interimText.substring(0, start) + placeholder + interimText.substring(start + original.length);
+  });
   audit.log('PER', 'LABELED_NAME', labeledNameMatches);
 
   // Progress: 100%
