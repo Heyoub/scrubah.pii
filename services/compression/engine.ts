@@ -479,10 +479,8 @@ export const compressTimeline = (
               file: doc.filename,
               field: "text",
               expected: "ScrubbedText with placeholders (PII removed)",
-              actual: "unscrubbed input",
+              actual: violationMessage,
               suggestion:
-                "Unscrubbed input detected. Aborting compression to prevent PHI leakage.",
-              extra: { reason: "PHI_POLICY_VIOLATION_UNSCRUBBED" },
             })
           );
         }
