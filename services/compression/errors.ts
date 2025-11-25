@@ -35,6 +35,7 @@ export class ParseError extends Data.TaggedError("ParseError")<{
   readonly expected: string;
   readonly actual: string;
   readonly suggestion: string;
+  readonly extra?: Record<string, unknown>;
 }> {
   get message(): string {
     return `Failed to parse ${this.field} in ${this.file}`;
@@ -53,6 +54,7 @@ export class ParseError extends Data.TaggedError("ParseError")<{
       expected: this.expected,
       actual: this.actual,
       suggestion: this.suggestion,
+      extra: this.extra,
       recoverable: this.recoverable,
       timestamp: new Date().toISOString(),
     };
@@ -297,6 +299,7 @@ export const toErrorRecord = (error: CompressionError): ErrorRecord => {
           field: error.field,
           expected: error.expected,
           actual: error.actual,
+          ...(error.extra ? { extra: error.extra } : {}),
         },
       };
 
