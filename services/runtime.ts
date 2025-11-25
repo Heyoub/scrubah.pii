@@ -73,12 +73,10 @@ const AppLayer = Logger.replace(Logger.defaultLogger, AppLogger);
 
 /**
  * Default runtime with app layer
+ *
+ * Note: Log level is configured via Logger.replace above
  */
-const AppRuntime = Runtime.defaultRuntime.pipe(
-  Runtime.setLogLevel(
-    process.env.NODE_ENV === "production" ? LogLevel.Info : LogLevel.Debug
-  )
-);
+const AppRuntime = Runtime.defaultRuntime;
 
 // ============================================================================
 // RUNTIME HELPERS
