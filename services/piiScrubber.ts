@@ -1,5 +1,5 @@
 import { pipeline, env } from '@huggingface/transformers';
-import { ScrubResult, PIIMap } from '../types';
+import { ScrubResult, PIIMap } from '../schemas';
 import { markAsScrubbed, mightContainPII } from '../schemas/phi';
 
 // Configure to not search for local models, use CDN

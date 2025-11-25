@@ -1,33 +1,20 @@
 /**
  * Content-Based Deduplication using SimHash
  * Detects semantic duplicates regardless of filename
+ *
+ * Types imported from schemas.ts (single source of truth)
  */
 
-export interface DocumentFingerprint {
-  contentHash: string;      // SHA-256 of normalized content
-  simHash: string;          // Fuzzy hash for near-duplicate detection
-  wordCount: number;
-  dateReferences: string[]; // Extracted dates for temporal matching
-  documentType: DocumentType;
-}
+import {
+  type DocumentFingerprint,
+  type DuplicateAnalysis,
+  type DifferenceType,
+  DocumentType, // Import both type and value
+} from '../schemas';
 
-export enum DocumentType {
-  LAB_REPORT = 'lab_report',
-  IMAGING = 'imaging',
-  PROGRESS_NOTE = 'progress_note',
-  PATHOLOGY = 'pathology',
-  MEDICATION = 'medication',
-  DISCHARGE = 'discharge',
-  CORRESPONDENCE = 'correspondence',
-  UNKNOWN = 'unknown'
-}
-
-export interface DuplicateAnalysis {
-  isDuplicate: boolean;
-  duplicateOf?: string;     // Hash of original document
-  similarity: number;        // 0-1 similarity score
-  differenceType: 'exact' | 'near-duplicate' | 'same-event' | 'unique';
-}
+// Re-export for backward compatibility
+export type { DocumentFingerprint, DuplicateAnalysis, DifferenceType } from '../schemas';
+export { DocumentType };
 
 /**
  * Normalize text for consistent hashing (remove whitespace variations, case)

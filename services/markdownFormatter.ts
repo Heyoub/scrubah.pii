@@ -1,4 +1,4 @@
-import { ProcessedFile, ScrubResult } from '../types';
+import { ProcessedFile, ScrubResult } from '../schemas';
 
 /**
  * HIPAA COMPLIANCE NOTE:
