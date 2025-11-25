@@ -12,6 +12,7 @@
  */
 
 import { Schema as S, pipe } from "effect";
+import type { ScrubbedText } from "./schemas/phi";
 
 /**
  * PROCESSING STAGE (Variant Type - like OCaml)
@@ -47,6 +48,11 @@ export const PIIMapSchema = S.Record({
 });
 export type PIIMap = S.Schema.Type<typeof PIIMapSchema>;
 
+// Mutable version for service implementations
+export interface MutablePIIMap {
+  [key: string]: string;
+}
+
 /**
  * SCRUB RESULT (Record Type with constraints)
  *
@@ -64,6 +70,7 @@ export const ScrubResultSchema = pipe(
     text: S.String,
     replacements: PIIMapSchema,
     count: S.Int,
+    confidence: S.optional(pipe(S.Number, S.greaterThanOrEqualTo(0), S.lessThanOrEqualTo(100))),
   }),
   S.filter(
     (result) => {
@@ -75,7 +82,14 @@ export const ScrubResultSchema = pipe(
     }
   )
 );
-export type ScrubResult = S.Schema.Type<typeof ScrubResultSchema>;
+
+// Override to use branded ScrubbedText type for HIPAA compliance
+export interface ScrubResult {
+  readonly text: ScrubbedText;
+  readonly replacements: MutablePIIMap;
+  readonly count: number;
+  readonly confidence?: number;
+}
 
 /**
  * PROCESSING STATS (Optional nested record)
@@ -129,7 +143,20 @@ export const ProcessedFileSchema = S.Struct({
   error: pipe(S.String, S.optional),
   stats: pipe(ProcessingStatsSchema, S.optional),
 });
-export type ProcessedFile = S.Schema.Type<typeof ProcessedFileSchema>;
+
+// Override to use branded ScrubbedText type for HIPAA compliance
+export interface ProcessedFile {
+  readonly id: string;
+  readonly originalName: string;
+  readonly size: number;
+  readonly type: string;
+  readonly stage: ProcessingStage;
+  readonly rawText?: string;
+  readonly scrubbedText?: ScrubbedText;
+  readonly markdown?: string;
+  readonly error?: string;
+  readonly stats?: ProcessingStats;
+}
 
 /**
  * DECODERS & ENCODERS (OCaml-style safe conversions)
