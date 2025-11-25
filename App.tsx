@@ -289,7 +289,7 @@ const App: React.FC = () => {
                   You are responsible for reviewing all output before sharing or submitting to any external service.
                 </p>
                 <p>
-                  <strong>Always manually verify:</strong> Use <kbd className="bg-amber-200 px-1.5 py-0.5 rounded text-xs font-mono">Ctrl+H</kbd> (Windows/Linux)
+                  <strong>Always manually verify:</strong> Use <kbd className="bg-amber-200 px-1.5 py-0.5 rounded text-xs font-mono">Ctrl+F</kbd> (Windows/Linux)
                   or <kbd className="bg-amber-200 px-1.5 py-0.5 rounded text-xs font-mono">Cmd+F</kbd> (Mac) to search for names, dates, addresses,
                   and other sensitive information that may have been missed.
                 </p>
