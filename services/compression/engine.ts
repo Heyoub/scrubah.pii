@@ -481,6 +481,7 @@ export const compressTimeline = (
               expected: "ScrubbedText with placeholders (PII removed)",
               actual: violationMessage,
               suggestion:
+                "Run the scrubbing pipeline before compression so raw PHI is removed.",
             })
           );
         }
