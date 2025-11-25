@@ -18,6 +18,7 @@
  */
 
 import { Effect } from "effect";
+import { assertScrubbed, ScrubbedText } from "../../schemas/phi";
 import {
   CompressedTimeline,
   TimelineEntry,
@@ -46,7 +47,7 @@ import {
 export interface ProcessedDocument {
   id: string;
   filename: string;
-  text: string;
+  text: ScrubbedText;
   metadata: {
     pageCount?: number;
     createdAt?: Date;
@@ -450,6 +451,21 @@ export const compressTimeline = (
 > => {
   return Effect.gen(function* (_) {
     const errorCollector = new ErrorCollector();
+
+    // Zero-trust guardrail: compression must never see raw PHI
+    for (const doc of documents) {
+      try {
+        assertScrubbed(doc.text);
+      } catch (error) {
+        return yield* _(Effect.fail(new ParseError({
+          file: doc.filename,
+          field: "text",
+          expected: "ScrubbedText with placeholders (PII removed)",
+          actual: error instanceof Error ? error.message : "unsafe text",
+          suggestion: "Run piiScrubber.scrub before compression to remove PII.",
+        })));
+      }
+    }
 
     // STAGE 1: Extract events
     progressCallback?.({

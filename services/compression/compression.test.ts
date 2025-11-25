@@ -6,6 +6,9 @@ import {
   defaultCompressionOptions,
   generateYAMLFromResult,
 } from "./index";
+import { markAsScrubbed } from "../../schemas/phi";
+
+const scrub = (text: string) => markAsScrubbed(text);
 
 /**
  * COMPRESSION PIPELINE TESTS
@@ -30,7 +33,7 @@ describe("Compression Pipeline - Effect-TS", () => {
         {
           id: "doc1",
           filename: "visit_2024_01_15.pdf",
-          text: "Patient visit on 01/15/2024. Chief complaint: headache.",
+          text: scrub("Patient visit on 01/15/2024. Chief complaint: headache."),
           metadata: { pageCount: 1 },
         },
       ];
@@ -57,13 +60,13 @@ describe("Compression Pipeline - Effect-TS", () => {
         {
           id: "doc1",
           filename: "visit1.pdf",
-          text: "Visit on 01/15/2024",
+          text: scrub("Visit on 01/15/2024"),
           metadata: {},
         },
         {
           id: "doc2",
           filename: "visit2.pdf",
-          text: "Visit on 02/20/2024",
+          text: scrub("Visit on 02/20/2024"),
           metadata: {},
         },
       ];
@@ -81,7 +84,7 @@ describe("Compression Pipeline - Effect-TS", () => {
         {
           id: "doc1",
           filename: "test.pdf",
-          text: "Visit on 01/15/2024. Lab results on 01/20/2024.",
+          text: scrub("Visit on 01/15/2024. Lab results on 01/20/2024."),
           metadata: {},
         },
       ];
@@ -102,7 +105,7 @@ describe("Compression Pipeline - Effect-TS", () => {
         {
           id: "doc1",
           filename: "visit.pdf",
-          text: "Patient visit on 03/15/2024. Consultation completed successfully.",
+          text: scrub("Patient visit on 03/15/2024. Consultation completed successfully."),
           metadata: {},
         },
       ];
@@ -121,7 +124,7 @@ describe("Compression Pipeline - Effect-TS", () => {
         {
           id: "doc1",
           filename: "labs.pdf",
-          text: "Lab results received on 04/10/2024. CBC panel complete.",
+          text: scrub("Lab results received on 04/10/2024. CBC panel complete."),
           metadata: {},
         },
       ];
@@ -139,7 +142,7 @@ describe("Compression Pipeline - Effect-TS", () => {
         {
           id: "doc1",
           filename: "meds.pdf",
-          text: "Patient started Lisinopril 10mg on 05/01/2024.",
+          text: scrub("Patient started Lisinopril 10mg on 05/01/2024."),
           metadata: {},
         },
       ];
@@ -157,12 +160,12 @@ describe("Compression Pipeline - Effect-TS", () => {
         {
           id: "doc1",
           filename: "comprehensive.pdf",
-          text: `
+          text: scrub(`
             Visit on 01/10/2024 - Annual checkup
             Lab results on 01/12/2024 - All normal
             Started medication XYZ on 01/15/2024
             Follow-up visit on 02/10/2024
-          `,
+          `),
           metadata: {},
         },
       ];
@@ -177,7 +180,7 @@ describe("Compression Pipeline - Effect-TS", () => {
         {
           id: "doc1",
           filename: "blank.pdf",
-          text: "This document contains no medical events.",
+          text: scrub("This document contains no medical events."),
           metadata: {},
         },
       ];
@@ -196,13 +199,13 @@ describe("Compression Pipeline - Effect-TS", () => {
         {
           id: "doc1",
           filename: "visit1.pdf",
-          text: "Visit on 03/15/2024",
+          text: scrub("Visit on 03/15/2024"),
           metadata: {},
         },
         {
           id: "doc2",
           filename: "visit1_copy.pdf",
-          text: "Visit on 03/15/2024",
+          text: scrub("Visit on 03/15/2024"),
           metadata: {},
         },
       ];
@@ -224,13 +227,13 @@ describe("Compression Pipeline - Effect-TS", () => {
         {
           id: "doc1",
           filename: "dup1.pdf",
-          text: "Visit on 04/20/2024",
+          text: scrub("Visit on 04/20/2024"),
           metadata: {},
         },
         {
           id: "doc2",
           filename: "dup2.pdf",
-          text: "Visit on 04/20/2024",
+          text: scrub("Visit on 04/20/2024"),
           metadata: {},
         },
       ];
@@ -251,13 +254,13 @@ describe("Compression Pipeline - Effect-TS", () => {
         {
           id: "doc1",
           filename: "visit_clinic_a.pdf",
-          text: "Visit on 05/10/2024",
+          text: scrub("Visit on 05/10/2024"),
           metadata: {},
         },
         {
           id: "doc2",
           filename: "visit_clinic_b.pdf",
-          text: "Visit on 05/10/2024",
+          text: scrub("Visit on 05/10/2024"),
           metadata: {},
         },
       ];
@@ -286,13 +289,13 @@ describe("Compression Pipeline - Effect-TS", () => {
         {
           id: "doc1",
           filename: "labs.pdf",
-          text: "Lab results on 06/01/2024", // High confidence
+          text: scrub("Lab results on 06/01/2024"), // High confidence
           metadata: {},
         },
         {
           id: "doc2",
           filename: "visit.pdf",
-          text: "Visit on 06/05/2024", // Medium confidence
+          text: scrub("Visit on 06/05/2024"), // Medium confidence
           metadata: {},
         },
       ];
@@ -316,13 +319,13 @@ describe("Compression Pipeline - Effect-TS", () => {
         {
           id: "doc1",
           filename: "lab1.pdf",
-          text: "Lab results on 01/01/2024",
+          text: scrub("Lab results on 01/01/2024"),
           metadata: {},
         },
         {
           id: "doc2",
           filename: "lab2.pdf",
-          text: "Lab results on 06/01/2024",
+          text: scrub("Lab results on 06/01/2024"),
           metadata: {},
         },
       ];
@@ -347,7 +350,7 @@ describe("Compression Pipeline - Effect-TS", () => {
         (_, i) => ({
           id: `doc${i}`,
           filename: `visit${i}.pdf`,
-          text: `Visit on ${String((i % 9) + 1).padStart(2, '0')}/${String((i % 28) + 1).padStart(2, '0')}/2024`,
+          text: scrub(`Visit on ${String((i % 9) + 1).padStart(2, '0')}/${String((i % 28) + 1).padStart(2, '0')}/2024`),
           metadata: {},
         })
       );
@@ -368,7 +371,7 @@ describe("Compression Pipeline - Effect-TS", () => {
         (_, i) => ({
           id: `doc${i}`,
           filename: `event${i}.pdf`,
-          text: `Visit on ${String((i % 9) + 1).padStart(2, '0')}/${String((i % 28) + 1).padStart(2, '0')}/2024`,
+          text: scrub(`Visit on ${String((i % 9) + 1).padStart(2, '0')}/${String((i % 28) + 1).padStart(2, '0')}/2024`),
           metadata: {},
         })
       );
@@ -393,7 +396,7 @@ describe("Compression Pipeline - Effect-TS", () => {
         {
           id: "doc1",
           filename: "ambiguous.pdf",
-          text: "Visit on 01/02/2024", // Could be Jan 2 or Feb 1
+          text: scrub("Visit on 01/02/2024"), // Could be Jan 2 or Feb 1
           metadata: {},
         },
       ];
@@ -412,7 +415,7 @@ describe("Compression Pipeline - Effect-TS", () => {
         {
           id: "doc1",
           filename: "malformed.pdf",
-          text: "Patient visit on 99/99/9999", // Invalid date (month/day out of range)
+          text: scrub("Patient visit on 99/99/9999"), // Invalid date (month/day out of range)
           metadata: {},
         },
       ];
@@ -429,7 +432,7 @@ describe("Compression Pipeline - Effect-TS", () => {
         {
           id: "doc1",
           filename: "test.pdf",
-          text: "Visit on 01/02/2024",
+          text: scrub("Visit on 01/02/2024"),
           metadata: {},
         },
       ];
@@ -451,7 +454,7 @@ describe("Compression Pipeline - Effect-TS", () => {
         {
           id: "doc1",
           filename: "visit.pdf",
-          text: "Visit on 07/15/2024",
+          text: scrub("Visit on 07/15/2024"),
           metadata: {},
         },
       ];
@@ -474,7 +477,7 @@ describe("Compression Pipeline - Effect-TS", () => {
         {
           id: "doc1",
           filename: "test.pdf",
-          text: "Visit on 08/01/2024",
+          text: scrub("Visit on 08/01/2024"),
           metadata: {},
         },
       ];
@@ -496,13 +499,13 @@ describe("Compression Pipeline - Effect-TS", () => {
         {
           id: "doc1",
           filename: "dup1.pdf",
-          text: "Visit on 09/10/2024",
+          text: scrub("Visit on 09/10/2024"),
           metadata: {},
         },
         {
           id: "doc2",
           filename: "dup2.pdf",
-          text: "Visit on 09/10/2024",
+          text: scrub("Visit on 09/10/2024"),
           metadata: {},
         },
       ];
@@ -526,7 +529,7 @@ describe("Compression Pipeline - Effect-TS", () => {
         {
           id: "doc1",
           filename: "special:chars[].pdf",
-          text: "Visit on 10/01/2024",
+          text: scrub("Visit on 10/01/2024"),
           metadata: {},
         },
       ];
@@ -549,13 +552,13 @@ describe("Compression Pipeline - Effect-TS", () => {
         {
           id: "doc1",
           filename: "test1.pdf",
-          text: "Visit on 11/01/2024",
+          text: scrub("Visit on 11/01/2024"),
           metadata: {},
         },
         {
           id: "doc2",
           filename: "test2.pdf",
-          text: "Visit on 11/05/2024",
+          text: scrub("Visit on 11/05/2024"),
           metadata: {},
         },
       ];
@@ -580,29 +583,29 @@ describe("Compression Pipeline - Effect-TS", () => {
         {
           id: "doc1",
           filename: "annual_checkup_2024.pdf",
-          text: `
+          text: scrub(`
             Patient visit on 01/15/2024
             Chief complaint: Annual physical examination
             Lab results ordered
-          `,
+          `),
           metadata: { documentType: "visit_note" },
         },
         {
           id: "doc2",
           filename: "lab_results_2024_01_20.pdf",
-          text: `
+          text: scrub(`
             Lab results on 01/20/2024
             CBC panel - All values within normal range
-          `,
+          `),
           metadata: { documentType: "lab_report" },
         },
         {
           id: "doc3",
           filename: "medication_update.pdf",
-          text: `
+          text: scrub(`
             Patient started Metformin 500mg on 02/01/2024
             Reason: Type 2 diabetes management
-          `,
+          `),
           metadata: { documentType: "prescription" },
         },
       ];
@@ -625,7 +628,7 @@ describe("Compression Pipeline - Effect-TS", () => {
         (_, i) => ({
           id: `doc${i}`,
           filename: `document_${i}.pdf`,
-          text: `Patient visit on ${String((i % 9) + 1).padStart(2, '0')}/${String((i % 28) + 1).padStart(2, '0')}/2024`,
+          text: scrub(`Patient visit on ${String((i % 9) + 1).padStart(2, '0')}/${String((i % 28) + 1).padStart(2, '0')}/2024`),
           metadata: {},
         })
       );
@@ -650,7 +653,7 @@ describe("Compression Pipeline - Effect-TS", () => {
         {
           id: "doc1",
           filename: "test.pdf",
-          text: "Visit on 12/01/2024",
+          text: scrub("Visit on 12/01/2024"),
           metadata: {},
         },
       ];
