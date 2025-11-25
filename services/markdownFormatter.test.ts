@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { formatToMarkdown } from './markdownFormatter';
 import { ProcessedFile, ProcessingStage, ScrubResult } from '../types';
+import { markAsScrubbed } from '../schemas/phi';
 
 describe('Markdown Formatter', () => {
   let mockFile: ProcessedFile;
@@ -16,7 +17,7 @@ describe('Markdown Formatter', () => {
     };
 
     mockScrubResult = {
-      text: 'Patient [PER_1] visited on [DATE_1]. Email: [EMAIL_1].',
+      text: markAsScrubbed('Patient [PER_1] visited on [DATE_1]. Email: [EMAIL_1].'),
       replacements: {
         'John Doe': '[PER_1]',
         '01/15/2024': '[DATE_1]',
@@ -70,7 +71,7 @@ describe('Markdown Formatter', () => {
     it('should include processing engine version', () => {
       const result = formatToMarkdown(mockFile, mockScrubResult, 1500);
 
-      expect(result).toContain('processing_engine: "Scrubah.PII-Local-v1"');
+      expect(result).toContain('processing_engine: "Scrubah.PII-Local-v2-HIPAA"');
     });
 
     it('should include ISO 8601 timestamp', () => {
@@ -99,7 +100,7 @@ describe('Markdown Formatter', () => {
     it('should remove excessive whitespace', () => {
       const scrubResult = {
         ...mockScrubResult,
-        text: 'Line 1\n\n\n\n\nLine 2',
+        text: markAsScrubbed('Line 1\n\n\n\n\nLine 2'),
       };
 
       const result = formatToMarkdown(mockFile, scrubResult, 1500);
@@ -111,7 +112,7 @@ describe('Markdown Formatter', () => {
     it('should remove duplicate consecutive lines', () => {
       const scrubResult = {
         ...mockScrubResult,
-        text: 'Short line\nShort line\nDifferent line',
+        text: markAsScrubbed('Short line\nShort line\nDifferent line'),
       };
 
       const result = formatToMarkdown(mockFile, scrubResult, 1500);
@@ -126,7 +127,7 @@ describe('Markdown Formatter', () => {
         'This is a very long line with more than 50 characters in total for testing purposes';
       const scrubResult = {
         ...mockScrubResult,
-        text: `${longLine}\n${longLine}`,
+        text: markAsScrubbed(`${longLine}\n${longLine}`),
       };
 
       const result = formatToMarkdown(mockFile, scrubResult, 1500);
@@ -139,7 +140,7 @@ describe('Markdown Formatter', () => {
     it('should trim trailing whitespace from lines', () => {
       const scrubResult = {
         ...mockScrubResult,
-        text: 'Line with trailing spaces   \nAnother line\t\t',
+        text: markAsScrubbed('Line with trailing spaces   \nAnother line\t\t'),
       };
 
       const result = formatToMarkdown(mockFile, scrubResult, 1500);
@@ -201,7 +202,7 @@ describe('Markdown Formatter', () => {
   describe('Edge Cases', () => {
     it('should handle empty scrubbed text', () => {
       const scrubResult: ScrubResult = {
-        text: '',
+        text: markAsScrubbed(''),
         replacements: {},
         count: 0,
       };
@@ -214,7 +215,7 @@ describe('Markdown Formatter', () => {
 
     it('should handle very large documents', () => {
       const scrubResult: ScrubResult = {
-        text: 'A'.repeat(1_000_000),
+        text: markAsScrubbed('A'.repeat(1_000_000)),
         replacements: {},
         count: 0,
       };
@@ -250,7 +251,7 @@ describe('Markdown Formatter', () => {
 
     it('should handle text with markdown special characters', () => {
       const scrubResult: ScrubResult = {
-        text: '**Bold** text and _italic_ text with # headers',
+        text: markAsScrubbed('**Bold** text and _italic_ text with # headers'),
         replacements: {},
         count: 0,
       };
@@ -274,7 +275,7 @@ describe('Markdown Formatter', () => {
       };
 
       const medicalScrubResult: ScrubResult = {
-        text: `
+        text: markAsScrubbed(`
 PATIENT CHART
 
 Name: [PER_1]
@@ -295,7 +296,7 @@ Secondary: Hypertension
 TREATMENT PLAN
 1. Prescribe [MEDICATION_1]
 2. Follow-up in 2 weeks
-        `.trim(),
+        `.trim()),
         replacements: {
           'Jane Doe': '[PER_1]',
           'Dr. Smith': '[PER_2]',

@@ -303,8 +303,9 @@ class PiiScrubberService {
         globalReplacements
       );
 
+      // HIPAA COMPLIANCE: Mark regex-only output as scrubbed
       return {
-        text: validatedText,
+        text: markAsScrubbed(validatedText),
         replacements: globalReplacements,
         count: Object.keys(globalReplacements).length,
       };
@@ -426,7 +427,7 @@ class PiiScrubberService {
     }
 
     return {
-      text: scrubbedOutput as unknown as string, // Cast for backwards compatibility
+      text: scrubbedOutput,
       replacements: globalReplacements,
       count: totalSecondPassReplacements,
       confidence: validation.confidenceScore
