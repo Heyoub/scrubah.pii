@@ -40,8 +40,7 @@ export default [
   {
     files: [
       'schemas/**/*.ts',
-      'schemas/*.ts',
-      'types.ts',
+      'schemas.ts',
     ],
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
@@ -50,6 +49,18 @@ export default [
       '@typescript-eslint/no-unsafe-call': 'error',
       '@typescript-eslint/no-unsafe-member-access': 'error',
       '@typescript-eslint/no-unsafe-return': 'error',
+    },
+  },
+
+  // STRICT: Error handling - all errors must be typed
+  {
+    files: [
+      'services/errors.ts',
+    ],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-unsafe-argument': 'error',
+      '@typescript-eslint/no-unsafe-assignment': 'error',
     },
   },
 

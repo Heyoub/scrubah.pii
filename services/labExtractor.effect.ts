@@ -1,23 +1,40 @@
 /**
- * Structured Lab Data Extraction
- * Converts prose lab reports into token-efficient table format
+ * LAB EXTRACTOR - EFFECT-TS VERSION
  *
- * Types imported from schemas.ts (single source of truth)
+ * Structured lab data extraction with algebraic effects.
+ *
+ * Architecture:
+ * - Effect<Result, AppError, never> (pure computation)
+ * - Railway-oriented programming (graceful degradation)
+ * - Runtime validation via Effect Schema
+ * - Immutable lab results
+ *
+ * OCaml equivalent:
+ * module LabExtractor : sig
+ *   val extract_lab_results : string -> string -> (lab_panel option, error) result
+ *   val format_lab_table : lab_panel -> string
+ *   val generate_trend_analysis : lab_panel -> lab_panel -> string
+ * end
  */
 
+import { Effect, pipe } from "effect";
 import {
-  type LabResult,
-  type LabPanel,
-} from '../schemas';
+  LabResult,
+  LabPanel,
+  LabStatus,
+  decodeLabPanel,
+} from "../schemas";
+import { LabExtractionError, ValidationError } from "./errors";
 
-// Re-export for backward compatibility
-export type { LabResult, LabPanel };
+// ============================================================================
+// LAB TEST PATTERNS
+// ============================================================================
 
 /**
  * Common lab test patterns with their variations
  */
 const LAB_TEST_PATTERNS = {
-  // Complete Blood Count (CBC) - Fixed: Use word boundaries and proper decimal capture
+  // Complete Blood Count (CBC)
   WBC: /(?:WBC|White Blood Cell|Leukocyte)[:\s]*(\d+(?:\.\d+)?)\s*(?:K\/µL|K\/uL|thou\/µL|x10\^3\/µL)/i,
   RBC: /(?:RBC|Red Blood Cell|Erythrocyte)[:\s]*(\d+(?:\.\d+)?)\s*(?:M\/µL|M\/uL|mill\/µL|x10\^6\/µL)/i,
   HGB: /(?:HGB|Hemoglobin|Hgb)[:\s]*(\d+(?:\.\d+)?)\s*(?:g\/dL|gm\/dL)/i,
@@ -48,15 +65,21 @@ const LAB_TEST_PATTERNS = {
   HDL: /(?:HDL|High Density Lipoprotein)[:\s]*(\d+(?:\.\d+)?)\s*(?:mg\/dL)/i,
   LDL: /(?:LDL|Low Density Lipoprotein)[:\s]*(\d+(?:\.\d+)?)\s*(?:mg\/dL)/i,
   TRIGLYCERIDES: /(?:Triglycerides|TRIG)[:\s]*(\d+(?:\.\d+)?)\s*(?:mg\/dL)/i,
-};
+} as const;
 
 /**
  * Reference ranges for common labs (for status determination)
  */
-const REFERENCE_RANGES: Record<string, { min: number; max: number; unit: string }> = {
+interface ReferenceRange {
+  readonly min: number;
+  readonly max: number;
+  readonly unit: string;
+}
+
+const REFERENCE_RANGES: Record<string, ReferenceRange> = {
   WBC: { min: 4.0, max: 11.0, unit: 'K/µL' },
-  RBC_M: { min: 4.5, max: 5.9, unit: 'M/µL' }, // Male
-  RBC_F: { min: 4.0, max: 5.2, unit: 'M/µL' }, // Female
+  RBC_M: { min: 4.5, max: 5.9, unit: 'M/µL' },
+  RBC_F: { min: 4.0, max: 5.2, unit: 'M/µL' },
   HGB_M: { min: 13.5, max: 17.5, unit: 'g/dL' },
   HGB_F: { min: 12.0, max: 15.5, unit: 'g/dL' },
   HCT_M: { min: 38.0, max: 50.0, unit: '%' },
@@ -72,15 +95,33 @@ const REFERENCE_RANGES: Record<string, { min: number; max: number; unit: string 
   TROPONIN: { min: 0, max: 0.04, unit: 'ng/mL' },
 };
 
+// ============================================================================
+// LAB EXTRACTION (Effect-based)
+// ============================================================================
+
 /**
  * Extract lab results from unstructured text
+ *
+ * Pure computation with Effect wrapper for error handling
+ *
+ * OCaml equivalent:
+ * let extract_lab_results text date =
+ *   let results = List.filter_map extract_single_test (get_patterns ()) in
+ *   match results with
+ *   | [] -> Ok None
+ *   | rs -> Ok (Some { panel_name = detect_panel rs; date; results = rs })
  */
-export const extractLabResults = (text: string, date: string): LabPanel | null => {
+export const extractLabResults = (
+  text: string,
+  date: string
+): Effect.Effect<LabPanel | null, LabExtractionError, never> => {
   const results: LabResult[] = [];
 
   for (const [testName, pattern] of Object.entries(LAB_TEST_PATTERNS)) {
-    const match = text.match(pattern);
-    if (match) {
+    // Use matchAll to find ALL occurrences, not just the first
+    const matches = Array.from(text.matchAll(new RegExp(pattern, 'gi')));
+
+    for (const match of matches) {
       const value = match[1];
       const fullMatch = match[0];
 
@@ -90,7 +131,7 @@ export const extractLabResults = (text: string, date: string): LabPanel | null =
 
       // Determine status
       const numericValue = parseFloat(value);
-      let status: LabResult['status'] = 'Normal';
+      let status: LabStatus = 'Normal';
 
       const range = REFERENCE_RANGES[testName];
       if (range && !isNaN(numericValue)) {
@@ -117,11 +158,14 @@ export const extractLabResults = (text: string, date: string): LabPanel | null =
     }
   }
 
-  if (results.length === 0) return null;
+  // No lab results found
+  if (results.length === 0) {
+    return Effect.succeed(null);
+  }
 
   // Determine panel name based on tests found
-  let panelName = 'Lab Results';
   const testNames = results.map(r => r.testName);
+  let panelName = 'Lab Results';
 
   if (testNames.some(t => ['WBC', 'RBC', 'HGB', 'HCT', 'PLT'].includes(t))) {
     panelName = 'Complete Blood Count (CBC)';
@@ -133,15 +177,23 @@ export const extractLabResults = (text: string, date: string): LabPanel | null =
     panelName = 'Cardiac Markers';
   }
 
-  return {
+  const panel: LabPanel = {
     panelName,
     date,
     results
   };
+
+  return Effect.succeed(panel);
 };
+
+// ============================================================================
+// LAB FORMATTING
+// ============================================================================
 
 /**
  * Format lab results as a markdown table (token-efficient)
+ *
+ * Pure computation
  */
 export const formatLabTable = (panel: LabPanel): string => {
   const rows = panel.results.map(r => {
@@ -166,6 +218,8 @@ export const formatLabTable = (panel: LabPanel): string => {
 
 /**
  * Generate trend analysis comparing two lab panels
+ *
+ * Pure computation with Effect wrapper
  */
 export const generateTrendAnalysis = (
   current: LabPanel,
@@ -200,4 +254,21 @@ export const generateTrendAnalysis = (
     '#### Trends vs Previous',
     ...trends
   ].join('\n');
+};
+
+// ============================================================================
+// BACKWARD COMPATIBILITY EXPORTS
+// ============================================================================
+
+/**
+ * Legacy sync wrappers for existing non-Effect code
+ *
+ * These will be removed once all services are migrated to Effect
+ */
+export const extractLabResultsSync = (
+  text: string,
+  date: string
+): LabPanel | null => {
+  const result = Effect.runSync(extractLabResults(text, date));
+  return result;
 };

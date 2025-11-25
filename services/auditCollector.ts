@@ -3,56 +3,18 @@
  *
  * Tracks all PII detection actions for compliance and debugging.
  * Similar pattern to ErrorCollector in compression module.
+ *
+ * Types imported from schemas.ts (single source of truth)
  */
 
-export interface AuditEntry {
-  /** Pattern type (e.g., 'EMAIL', 'SSN', 'PER') */
-  patternType: string;
-  /** Pattern name/identifier */
-  patternName: string;
-  /** Number of matches found */
-  matchCount: number;
-  /** The actual values that were replaced (for verification) */
-  replacements: Array<{ original: string; placeholder: string }>;
-  /** Timestamp when this pattern was processed */
-  timestamp: number;
-  /** Processing time in ms for this pattern */
-  durationMs?: number;
-}
+import {
+  type AuditEntry,
+  type AuditSummary,
+  type AuditReport,
+} from '../schemas';
 
-export interface AuditSummary {
-  /** Total PII items detected */
-  totalDetections: number;
-  /** Breakdown by category */
-  byCategory: Record<string, number>;
-  /** Total processing time */
-  totalDurationMs: number;
-  /** Confidence score (0-100) */
-  confidenceScore: number;
-  /** Timestamp when scrubbing started */
-  startedAt: number;
-  /** Timestamp when scrubbing completed */
-  completedAt: number;
-  /** PII density: percentage of original text that was PII (0-100) */
-  piiDensityPercent: number;
-  /** Total characters of PII that were replaced */
-  piiCharactersRemoved: number;
-  /** Size change: negative means text got smaller (placeholders shorter than originals) */
-  sizeChangeBytes: number;
-  /** Average length of detected PII items */
-  averagePiiLength: number;
-}
-
-export interface AuditReport {
-  summary: AuditSummary;
-  entries: AuditEntry[];
-  /** Document metadata */
-  document: {
-    filename?: string;
-    originalSizeBytes: number;
-    scrubbedSizeBytes: number;
-  };
-}
+// Re-export for backward compatibility
+export type { AuditEntry, AuditSummary, AuditReport };
 
 export class AuditCollector {
   private entries: AuditEntry[] = [];
