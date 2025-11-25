@@ -42,12 +42,17 @@ export class ValidationError extends Data.TaggedError("ValidationError")<{
  * Used by piiScrubber.effect.ts when BERT NER model fails
  */
 export class MLModelError extends Data.TaggedError("MLModelError")<{
-  readonly message: string;
-  readonly modelName?: string;
-  readonly context?: Record<string, unknown>;
+  readonly modelName: string;
+  readonly reason: string;
+  readonly fallbackUsed: boolean;
+  readonly suggestion: string;
 }> {
+  get message(): string {
+    return `ML model ${this.modelName} failed: ${this.reason}`;
+  }
+
   get recoverable(): boolean {
-    return true; // Can fall back to regex-only scrubbing
+    return this.fallbackUsed; // Recoverable if regex fallback worked
   }
 
   toJSON() {
@@ -55,7 +60,9 @@ export class MLModelError extends Data.TaggedError("MLModelError")<{
       _tag: this._tag,
       message: this.message,
       modelName: this.modelName,
-      context: this.context,
+      reason: this.reason,
+      fallbackUsed: this.fallbackUsed,
+      suggestion: this.suggestion,
       recoverable: this.recoverable,
       timestamp: new Date().toISOString(),
     };
@@ -68,22 +75,27 @@ export class MLModelError extends Data.TaggedError("MLModelError")<{
  * Used when confidence score is low but pattern matches
  */
 export class PIIDetectionWarning extends Data.TaggedError("PIIDetectionWarning")<{
-  readonly message: string;
-  readonly pattern: string;
+  readonly entity: string;
   readonly confidence: number;
-  readonly context?: Record<string, unknown>;
+  readonly context: string;
+  readonly suggestion: string;
 }> {
+  get message(): string {
+    return `Low confidence PII detection: "${this.entity}" (${(this.confidence * 100).toFixed(1)}%)`;
+  }
+
   get recoverable(): boolean {
-    return true; // Warning, not error - can proceed
+    return true; // Warnings are always recoverable
   }
 
   toJSON() {
     return {
       _tag: this._tag,
       message: this.message,
-      pattern: this.pattern,
+      entity: this.entity,
       confidence: this.confidence,
       context: this.context,
+      suggestion: this.suggestion,
       recoverable: this.recoverable,
       timestamp: new Date().toISOString(),
     };
@@ -233,6 +245,148 @@ export class TimelineConflictError extends Data.TaggedError("TimelineConflictErr
 }
 
 /**
+ * PDF PARSE ERROR - PDF parsing failed
+ *
+ * Used by fileParser.effect.ts when PDF extraction fails
+ */
+export class PDFParseError extends Data.TaggedError("PDFParseError")<{
+  readonly file: string;
+  readonly page?: number;
+  readonly reason: string;
+  readonly suggestion: string;
+}> {
+  readonly timestamp: string = new Date().toISOString();
+
+  get message(): string {
+    const pageInfo = this.page ? ` (page ${this.page})` : "";
+    return `Failed to parse PDF ${this.file}${pageInfo}: ${this.reason}`;
+  }
+
+  get recoverable(): boolean {
+    return false; // Can't recover from corrupt PDF
+  }
+
+  toJSON() {
+    return {
+      _tag: this._tag,
+      message: this.message,
+      file: this.file,
+      page: this.page,
+      reason: this.reason,
+      suggestion: this.suggestion,
+      recoverable: this.recoverable,
+      timestamp: this.timestamp,
+    };
+  }
+}
+
+/**
+ * OCR ERROR - Optical character recognition failed or low confidence
+ *
+ * Used by fileParser.effect.ts when OCR quality is poor
+ */
+export class OCRError extends Data.TaggedError("OCRError")<{
+  readonly file: string;
+  readonly confidence: number;
+  readonly suggestion: string;
+}> {
+  get message(): string {
+    return `OCR confidence too low for ${this.file} (${(this.confidence * 100).toFixed(1)}%)`;
+  }
+
+  get recoverable(): boolean {
+    return true; // Can try with manual review
+  }
+
+  toJSON() {
+    return {
+      _tag: this._tag,
+      message: this.message,
+      file: this.file,
+      confidence: this.confidence,
+      suggestion: this.suggestion,
+      recoverable: this.recoverable,
+      timestamp: new Date().toISOString(),
+    };
+  }
+}
+
+/**
+ * SCHEMA VALIDATION ERROR - Runtime schema validation failed
+ *
+ * Used when Effect Schema decode fails
+ */
+export class SchemaValidationError extends Data.TaggedError("SchemaValidationError")<{
+  readonly schema: string;
+  readonly field: string;
+  readonly expected: string;
+  readonly actual: string;
+  readonly suggestion: string;
+}> {
+  get message(): string {
+    return `Schema validation failed for ${this.schema}.${this.field}: expected ${this.expected}, got ${this.actual}`;
+  }
+
+  get recoverable(): boolean {
+    return false; // Schema violations are fatal
+  }
+
+  toJSON() {
+    return {
+      _tag: this._tag,
+      message: this.message,
+      schema: this.schema,
+      field: this.field,
+      expected: this.expected,
+      actual: this.actual,
+      suggestion: this.suggestion,
+      recoverable: this.recoverable,
+      timestamp: new Date().toISOString(),
+    };
+  }
+}
+
+/**
+ * FILE SYSTEM ERROR - File I/O operation failed
+ *
+ * Used when file read/write/delete fails
+ */
+export class FileSystemError extends Data.TaggedError("FileSystemError")<{
+  readonly operation: "read" | "write" | "delete";
+  readonly path: string;
+  readonly reason: string;
+  readonly suggestion: string;
+}> {
+  get message(): string {
+    return `File ${this.operation} failed for ${this.path}: ${this.reason}`;
+  }
+
+  get recoverable(): boolean {
+    return false; // Can't proceed without file access
+  }
+
+  toJSON() {
+    return {
+      _tag: this._tag,
+      message: this.message,
+      operation: this.operation,
+      path: this.path,
+      reason: this.reason,
+      suggestion: this.suggestion,
+      recoverable: this.recoverable,
+      timestamp: new Date().toISOString(),
+    };
+  }
+}
+
+/**
+ * APP ERROR - Generic application error (union type alias)
+ *
+ * For backward compatibility with existing code
+ */
+export type AppError = ServiceError;
+
+/**
  * Union of all service errors (for type safety)
  */
 export type ServiceError =
@@ -243,7 +397,11 @@ export type ServiceError =
   | LabExtractionError
   | TimelineError
   | MissingDateError
-  | TimelineConflictError;
+  | TimelineConflictError
+  | PDFParseError
+  | OCRError
+  | SchemaValidationError
+  | FileSystemError;
 
 /**
  * Error Collector (for accumulating multiple errors during processing)
