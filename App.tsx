@@ -8,7 +8,8 @@ import {
   Github,
   Mail,
   Cpu,
-  Calendar
+  Calendar,
+  AlertTriangle
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { clsx } from 'clsx';
@@ -272,6 +273,35 @@ const App: React.FC = () => {
             pipeline. Scrub Personally Identifiable Information (PII) from contracts, records, and transcripts using on-device AI.
             Format for LLMs without leaking secrets.
           </p>
+        </div>
+
+        {/* Important Disclaimer */}
+        <div className="bg-amber-50 border-l-4 border-amber-500 p-5 mb-8">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
+            <div className="space-y-3">
+              <h3 className="font-bold text-amber-900 uppercase tracking-tight text-sm">
+                Important: Always Verify Before Sharing
+              </h3>
+              <div className="text-sm text-amber-800 space-y-2">
+                <p>
+                  <strong>This tool uses AI and pattern matching which may not catch all PII.</strong> No automated system is 100% accurate.
+                  You are responsible for reviewing all output before sharing or submitting to any external service.
+                </p>
+                <p>
+                  <strong>Always manually verify:</strong> Use <kbd className="bg-amber-200 px-1.5 py-0.5 rounded text-xs font-mono">Ctrl+H</kbd> (Windows/Linux)
+                  or <kbd className="bg-amber-200 px-1.5 py-0.5 rounded text-xs font-mono">Cmd+F</kbd> (Mac) to search for names, dates, addresses,
+                  and other sensitive information that may have been missed.
+                </p>
+                <p className="text-xs text-amber-700 pt-1 border-t border-amber-200">
+                  <strong>Zero-Trust Architecture:</strong> All processing happens locally in your browser. No data is sent to any server.
+                  However, this does not constitute legal or compliance advice. Consult your compliance officer before using
+                  scrubbed documents for HIPAA, GDPR, or other regulated purposes. By using this tool, you accept full responsibility
+                  for verifying the completeness of PII removal.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Error Banner */}
