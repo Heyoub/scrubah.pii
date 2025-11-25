@@ -1,8 +1,8 @@
 # Master Timeline - Usage Guide
 
-## ✅ What's New
+## Overview
 
-You now have a **"Generate Timeline"** button that compiles all your processed documents into a single, chronologically-ordered, LLM-optimized medical record.
+The **"Generate Timeline"** button compiles all processed documents into a single, chronologically-ordered, LLM-optimized medical record.
 
 ## 🎯 How to Use
 
@@ -217,7 +217,7 @@ if (similarity >= 0.95) {  // ← Change this
 
 ## 📊 Performance
 
-**Timeline Generation Speed** (your i7 hardware):
+**Timeline Generation Speed**:
 
 - 10 documents: ~100-200ms
 - 50 documents: ~300-500ms
@@ -276,24 +276,11 @@ Duplicate detection details are logged. Check console to understand what was det
 - **Individual Files** (Download Bundle): For quick reference
 - **Master Timeline**: For comprehensive LLM analysis
 
-## 🚀 Next Steps
+## 🚀 Tips
 
-Now that you have the timeline feature:
-
-1. **Test with your 142 PDFs**
-   - Upload them all
-   - Generate the timeline
-   - Review the markdown output
-
-2. **Feed to Claude/GPT-4**
-   - Copy the timeline markdown
-   - Ask: "Analyze this medical timeline for trends and insights"
-   - The structure is optimized for frontier model analysis
-
-3. **Iterate on Patterns**
-   - If your lab tests aren't detected, add patterns
-   - If duplicates are missed, adjust threshold
-   - All easily customizable in the services files
+- **Feed to Claude/GPT-4**: Copy the timeline markdown and ask for analysis - the structure is optimized for LLM consumption
+- **Iterate on Patterns**: If your lab tests aren't detected, add patterns to `labExtractor.ts`
+- **Adjust Thresholds**: If duplicates are missed, lower the similarity threshold in `contentHasher.ts`
 
 ## 📚 Additional Resources
 

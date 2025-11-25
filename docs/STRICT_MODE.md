@@ -153,5 +153,5 @@ return step3(afterStep2);
 
 ## Verification
 
-Run `bun run lint:strict` to verify HIPAA-critical modules have no `any` leakage.
-Run `bun run build` to verify the full project compiles.
+Run `npm run lint:strict` to verify HIPAA-critical modules have no `any` leakage.
+Run `npm run build` to verify the full project compiles.
