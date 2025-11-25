@@ -11,7 +11,7 @@ import {
   collectGarbage,
   RelevanceScoreSchema
 } from './medicalRelevanceFilter';
-import { ProcessedFile, ProcessingStage } from '../types';
+import { ProcessedFile, ProcessingStage } from '../schemas';
 import { markAsScrubbed } from '../schemas/phi';
 
 /**

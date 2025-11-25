@@ -15,7 +15,7 @@
  */
 
 import { Effect, Schema as S, pipe } from "effect";
-import { ProcessedFile } from "../types";
+import { ProcessedFile } from "../schemas";
 
 /**
  * RELEVANCE SCORE SCHEMA
