@@ -174,6 +174,12 @@ class ScrubberWorkerManager {
    */
   terminate(): void {
     if (this.worker) {
+      // Reject any pending jobs
+      for (const [_jobId, job] of this.pendingJobs) {
+        job.reject(new Error('Worker terminated'));
+      }
+      this.pendingJobs.clear();
+
       this.worker.terminate();
       this.worker = null;
     }
