@@ -18,7 +18,7 @@
 
 import { Effect, Context, Layer, pipe } from "effect";
 import { pipeline, env } from "@huggingface/transformers";
-import { ScrubResult, PIIMap, decodeScrubResult } from "../schemas";
+import { ScrubResult, PIIMap, decodeScrubResult } from "../schemas/schemas";
 import { markAsScrubbed } from "../schemas/phi";
 import { MLModelError, PIIDetectionWarning, ErrorCollector } from "./errors";
 
@@ -47,7 +47,7 @@ interface NEREntity {
  * PATTERNS (Regex for structural PII)
  */
 const PATTERNS = {
-  EMAIL: /\b[\w\.-]+@[\w\.-]+\.\w{2,}\b/g,
+  EMAIL: /\b[\w\.-]+@[\w\.-]+\.\w{2,4}\b/g,
   PHONE: /(?:\+?1[-. ]?)?\(?([0-9]{3})\)?[-. ]?([0-9]{3})[-. ]?([0-9]{4})/g,
   SSN: /\b\d{3}-\d{2}-\d{4}\b/g,
   DATE: /\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b/g,
@@ -103,6 +103,17 @@ type NERPipeline = (
 ) => Promise<NEREntity[]>;
 
 /**
+ * Create IntlSegmenter safely with proper typing
+ */
+const createSegmenter = (): IntlSegmenter | undefined => {
+  if ("Segmenter" in Intl) {
+    const SegmenterClass = (Intl as unknown as { Segmenter: new (locale: string, options: { granularity: string }) => IntlSegmenter }).Segmenter;
+    return new SegmenterClass("en", { granularity: "sentence" });
+  }
+  return undefined;
+};
+
+/**
  * Factory function creates MLModelService without `this` inference issues
  * This pattern avoids TypeScript strict mode stack overflow
  */
@@ -110,10 +121,7 @@ function createMLModelService(): MLModelService {
   // Captured state (no `this` needed)
   let pipe: NERPipeline | null = null;
   let loadPromise: Promise<void> | null = null;
-  const _segmenter: IntlSegmenter | undefined =
-    "Segmenter" in Intl
-      ? new (Intl as unknown as { Segmenter: new (locale: string, options: { granularity: string }) => IntlSegmenter }).Segmenter("en", { granularity: "sentence" })
-      : undefined;
+  const _segmenter: IntlSegmenter | undefined = createSegmenter();
 
   const loadModel = (): Effect.Effect<void, MLModelError, never> => {
     return Effect.suspend(() => {
@@ -182,8 +190,8 @@ function createMLModelService(): MLModelService {
 // Helper for sentence segmentation (separate from ML service)
 // @internal Reserved for future chunking optimization
 function _getSentences(text: string): string[] {
-  if ("Segmenter" in Intl) {
-    const segmenter = new (Intl as unknown as { Segmenter: new (locale: string, options: { granularity: string }) => IntlSegmenter }).Segmenter("en", { granularity: "sentence" });
+  const segmenter = createSegmenter();
+  if (segmenter) {
     return Array.from(segmenter.segment(text)).map((s) => s.segment);
   }
   return text.match(/[^.!?]+[.!?]+]*/g) || [text];
@@ -202,6 +210,20 @@ export const MLModelServiceLive: Layer.Layer<MLModelService, never, never> = Lay
   MLModelService,
   createMLModelService()
 );
+
+/**
+ * EXPORTED LOAD MODEL (for testing)
+ *
+ * Pre-loads the ML model so tests don't need to wait for lazy loading
+ */
+export const loadModel = async (): Promise<void> => {
+  const service = createMLModelService();
+  return new Promise((resolve, reject) => {
+    Effect.runPromise(service.loadModel())
+      .then(() => resolve())
+      .catch(reject);
+  });
+};
 
 /**
  * CONTEXT-AWARE MRN DETECTION
@@ -316,11 +338,8 @@ const regexPrePass = (text: string): ScrubState => {
  * PHASE 2: SMART CHUNKING
  */
 const smartChunk = (text: string, maxChunkSize = 2000): string[] => {
-  // Use sentence segmenter if available - explicit type casting
-  const segmenter: IntlSegmenter | null =
-    "Segmenter" in Intl
-      ? new (Intl as unknown as { Segmenter: new (locale: string, options: { granularity: string }) => IntlSegmenter }).Segmenter("en", { granularity: "sentence" })
-      : null;
+  // Use sentence segmenter if available
+  const segmenter: IntlSegmenter | undefined = createSegmenter();
 
   const sentences: string[] = segmenter
     ? Array.from(segmenter.segment(text)).map((s) => s.segment)
@@ -502,15 +521,6 @@ export const scrubPII = (
 
     return { result, errors: errorCollector };
   });
-};
-
-/**
- * HELPER: Load ML model eagerly (for UI loading states)
- */
-export const loadModel = async (): Promise<void> => {
-  const mlModel = createMLModelService();
-  const program = mlModel.loadModel();
-  await Effect.runPromise(program);
 };
 
 /**

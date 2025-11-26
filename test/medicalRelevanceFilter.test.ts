@@ -10,8 +10,8 @@ import {
   calculateRelevanceScore,
   collectGarbage,
   RelevanceScoreSchema
-} from './medicalRelevanceFilter';
-import { ProcessedFile, ProcessingStage } from '../schemas';
+} from '../services/medicalRelevanceFilter';
+import { ProcessedFile, ProcessingStage } from '../schemas/schemas';
 import { markAsScrubbed } from '../schemas/phi';
 
 /**

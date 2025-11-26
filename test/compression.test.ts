@@ -5,8 +5,8 @@ import {
   ProcessedDocument,
   defaultCompressionOptions,
   generateYAMLFromResult,
-} from "./index";
-import { markAsScrubbed } from "../../schemas/phi";
+} from "../services/compression/index";
+import { markAsScrubbed } from "../schemas/phi";
 
 const scrub = (text: string) => markAsScrubbed(text);
 
@@ -245,7 +245,7 @@ describe("Compression Pipeline - Effect-TS", () => {
 
       // Should have deduplication warning
       const errors = result.errors.getAll();
-      const dedupError = errors.find((e) => e.type === "DeduplicationError");
+      const dedupError = errors.find((e) => e._tag === "DeduplicationError");
       expect(dedupError).toBeDefined();
     });
 
@@ -384,7 +384,7 @@ describe("Compression Pipeline - Effect-TS", () => {
       // Should have size warning
       const errors = result.errors.getAll();
       const sizeError = errors.find(
-        (e) => e.type === "CompressionSizeExceededError"
+        (e) => e._tag === "CompressionSizeExceededError"
       );
       expect(sizeError).toBeDefined();
     });
@@ -405,7 +405,7 @@ describe("Compression Pipeline - Effect-TS", () => {
 
       // Should have date ambiguity warning
       const errors = result.errors.getAll();
-      const dateError = errors.find((e) => e.type === "DateAmbiguityError");
+      const dateError = errors.find((e) => e._tag === "DateAmbiguityError");
       expect(dateError).toBeDefined();
       expect(dateError?.suggestion).toContain("date format");
     });

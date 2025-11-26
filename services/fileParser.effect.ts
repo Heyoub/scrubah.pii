@@ -124,7 +124,7 @@ const parsePDFPage = (
 
     // Check if page is scanned (< 50 chars = likely image)
     const rawPageText = textContent.items
-      .map((item: any) => item.str)
+      .map((item) => (item as TextItem).str)
       .join("");
 
     if (rawPageText.length < 50) {
@@ -150,7 +150,7 @@ const parsePDFPage = (
       yield* _(
         Effect.tryPromise({
           try: () =>
-            page.render({ canvasContext: context, viewport } as any).promise,
+            (page.render({ canvasContext: context, viewport }) as unknown as { promise: Promise<void> }).promise,
           catch: (error) =>
             new PDFParseError({
               file: "pdf",

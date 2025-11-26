@@ -1,5 +1,5 @@
 import Dexie, { Table } from 'dexie';
-import { ProcessedFile } from '../schemas';
+import { ProcessedFile } from '../schemas/schemas';
 
 class CleanSlateDB extends Dexie {
   files!: Table<ProcessedFile>;

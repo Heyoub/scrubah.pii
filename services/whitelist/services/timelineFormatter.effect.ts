@@ -20,7 +20,7 @@ import type {
   VitalSigns,
   PathologyResult,
   LabStatus,
-} from "../../../schemas/index";
+} from "../../../schemas/schemas";
 
 // ============================================================================
 // STATUS EMOJI MAPPING

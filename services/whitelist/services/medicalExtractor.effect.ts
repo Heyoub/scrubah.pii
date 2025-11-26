@@ -31,7 +31,7 @@ import type {
   DocumentType,
   LabStatus,
   Severity,
-} from "../../../schemas/index";
+} from "../../../schemas/schemas";
 import {
   PIILeakageError,
   SectionExtractionError,

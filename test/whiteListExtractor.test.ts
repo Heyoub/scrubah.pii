@@ -10,16 +10,17 @@ import { Effect } from "effect";
 import { extractMedicalData } from "../services/whitelist/services/medicalExtractor.effect";
 import { formatMedicalTimeline } from "../services/whitelist/services/timelineFormatter.effect";
 import { runExtractionPipeline } from "../services/whitelist/services/extractionPipeline.effect";
+import { TEST_PII } from "../services/testConstants";
 
 // ============================================================================
 // TEST DATA - Simulates the leaked content from your timeline
 // ============================================================================
 
 const SAMPLE_LAB_REPORT = `
-Patient Name: John Smith
-DOB: 05/15/1985
-MRN: 123456789
-Date: 11/20/2025
+Patient Name: ${TEST_PII.NAME_PATIENT}
+DOB: ${TEST_PII.DATE_BIRTH}
+MRN: ${TEST_PII.MRN_PRIMARY}
+Date: ${TEST_PII.DATE_VISIT}
 
 COMPLETE BLOOD COUNT
 
@@ -37,16 +38,16 @@ Creatinine: 0.9 mg/dL
 Sodium: 140 mEq/L
 Potassium: 4.2 mEq/L
 
-Reviewed by: Dr. Sarah Johnson, M.D.
-Phone: 555-0100
-Lab License: LAB123456
+Reviewed by: ${TEST_PII.NAME_DOCTOR}, M.D.
+Phone: ${TEST_PII.PHONE_PRIMARY}
+Lab License: ${TEST_PII.MRN_PRIMARY}
 `;
 
 const SAMPLE_IMAGING_REPORT = `
 MRI Lumbar Spine without Contrast
-Date: 04/15/2025
+Date: ${TEST_PII.DATE_VISIT}
 
-Patient: DOE, JANEB05/15/1985FIN9876543MRN987654
+Patient: ${TEST_PII.NAME_PATIENT.toUpperCase()}${TEST_PII.DATE_BIRTH.replace(/\//g, '')}FIN9876543MRN${TEST_PII.MRN_PRIMARY}
 
 HISTORY: Low back pain. Fall one week ago.
 
@@ -64,9 +65,9 @@ IMPRESSION:
 Multilevel degenerative changes. Moderate canal narrowing at L4-L5.
 No acute fracture or significant neural foraminal stenosis.
 
-Interpreted by: Robert Smith, M.D.
-Signed by: Johnson RN, Sarah
-Location: Example Medical Center Radiology
+Interpreted by: ${TEST_PII.NAME_DOCTOR}, M.D.
+Signed by: ${TEST_PII.NAME_NURSE}
+Location: ${TEST_PII.LOCATION_HOSPITAL} Radiology
 `;
 
 const SAMPLE_PATHOLOGY_REPORT = `
@@ -92,8 +93,8 @@ Clinical Correlation:
 Family member present during consultation.
 Plan for palliative radiation and outpatient chemotherapy.
 
-Pathologist: Jennifer Williams M.D.
-Contact: pathology@example.invalid
+Pathologist: ${TEST_PII.NAME_DOCTOR} M.D.
+Contact: ${TEST_PII.EMAIL_PRIMARY}
 `;
 
 // ============================================================================

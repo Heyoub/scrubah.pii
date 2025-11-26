@@ -8,6 +8,9 @@ export default defineConfig(() => {
         port: 3500,
         host: '0.0.0.0',
       },
+      build: {
+        sourcemap: false,
+      },
       plugins: [react()],
       resolve: {
         alias: {

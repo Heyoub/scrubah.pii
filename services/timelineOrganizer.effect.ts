@@ -16,7 +16,7 @@
 
 import { Effect } from "effect";
 import { parse, isValid } from "date-fns";
-import { ProcessedFile } from "../schemas";
+import { ProcessedFile } from "../schemas/schemas";
 import { MissingDateError, TimelineConflictError, ErrorCollector } from "./errors";
 import {
   DocumentFingerprint,

@@ -23,7 +23,7 @@ import {
   LabPanel,
   LabStatus,
   decodeLabPanel,
-} from "../schemas";
+} from "../schemas/schemas";
 import { LabExtractionError, ValidationError } from "./errors";
 
 // ============================================================================

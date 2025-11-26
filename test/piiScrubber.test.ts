@@ -1,15 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { detectContextualMRN, MRN_CONTEXT_KEYWORDS } from '../services/piiScrubber.effect';
 import { detectLabeledName, NAME_LABELS, PATTERNS } from '../.archive/piiScrubber';
+import { TEST_PII } from '../services/testConstants';
 
 describe('PII Scrubber - Regex Patterns', () => {
   describe('EMAIL Pattern', () => {
     it('should match valid email addresses', () => {
-      const text = 'Contact john.doe@example.com or jane_smith@company.co.uk';
+      const text = `Contact ${TEST_PII.EMAIL_PRIMARY} or ${TEST_PII.EMAIL_SECONDARY}`;
       const matches = text.match(PATTERNS.EMAIL);
       expect(matches).toHaveLength(2);
-      expect(matches).toContain('john.doe@example.com');
-      expect(matches).toContain('jane_smith@company.co.uk');
+      expect(matches).toContain(TEST_PII.EMAIL_PRIMARY);
+      expect(matches).toContain(TEST_PII.EMAIL_SECONDARY);
     });
 
     it('should handle invalid email patterns gracefully', () => {
@@ -40,10 +41,10 @@ describe('PII Scrubber - Regex Patterns', () => {
 
   describe('SSN Pattern', () => {
     it('should match SSN in XXX-XX-XXXX format', () => {
-      const text = 'SSN: 123-45-6789';
+      const text = `SSN: ${TEST_PII.SSN_PRIMARY}`;
       const matches = text.match(PATTERNS.SSN);
       expect(matches).toHaveLength(1);
-      expect(matches![0]).toBe('123-45-6789');
+      expect(matches![0]).toBe(TEST_PII.SSN_PRIMARY);
     });
 
     it('should not match SSN without dashes', () => {
@@ -206,12 +207,12 @@ describe('PII Scrubber - Real-world Medical Document Test', () => {
   it('should detect all PII in a sample medical note', () => {
     const medicalNote = `
       PATIENT INFORMATION
-      Name: Dr. Jane Smith
-      MRN: MED123456
-      DOB: 01/15/1985
-      Phone: (555) 123-4567
-      Email: jane.smith@email.com
-      SSN: 123-45-6789
+      Name: ${TEST_PII.NAME_DOCTOR}
+      MRN: ${TEST_PII.MRN_PRIMARY}
+      DOB: ${TEST_PII.DATE_BIRTH}
+      Phone: ${TEST_PII.PHONE_PRIMARY}
+      Email: ${TEST_PII.EMAIL_PRIMARY}
+      SSN: ${TEST_PII.SSN_PRIMARY}
 
       VISIT SUMMARY
       Patient presented to clinic on 12/20/2024.
@@ -226,7 +227,7 @@ describe('PII Scrubber - Real-world Medical Document Test', () => {
     // Test email detection
     const emailMatches = medicalNote.match(PATTERNS.EMAIL);
     expect(emailMatches).not.toBeNull();
-    expect(emailMatches).toContain('jane.smith@email.com');
+    expect(emailMatches).toContain(TEST_PII.EMAIL_PRIMARY);
 
     // Test phone detection
     const phoneMatches = medicalNote.match(PATTERNS.PHONE);
@@ -235,7 +236,7 @@ describe('PII Scrubber - Real-world Medical Document Test', () => {
     // Test SSN detection
     const ssnMatches = medicalNote.match(PATTERNS.SSN);
     expect(ssnMatches).not.toBeNull();
-    expect(ssnMatches).toContain('123-45-6789');
+    expect(ssnMatches).toContain(TEST_PII.SSN_PRIMARY);
   });
 });
 
@@ -398,10 +399,10 @@ describe('PII Scrubber - Address Patterns', () => {
 describe('PII Scrubber - Label-Based Name Detection', () => {
   it('should detect names with common labels', () => {
     const tests = [
-      { text: 'Patient Name: John Smith', expected: 'John Smith' },
-      { text: 'Name: Mary Johnson', expected: 'Mary Johnson' },
-      { text: 'Full Name: Robert Williams', expected: 'Robert Williams' },
-      { text: 'Legal Name: Sarah Davis', expected: 'Sarah Davis' }
+      { text: `Patient Name: ${TEST_PII.NAME_PATIENT}`, expected: TEST_PII.NAME_PATIENT },
+      { text: `Name: ${TEST_PII.NAME_DOCTOR}`, expected: TEST_PII.NAME_DOCTOR },
+      { text: `Full Name: ${TEST_PII.NAME_NURSE}`, expected: TEST_PII.NAME_NURSE },
+      { text: `Legal Name: ${TEST_PII.NAME_PATIENT}`, expected: TEST_PII.NAME_PATIENT }
     ];
 
     tests.forEach(({ text, expected }) => {
@@ -413,10 +414,10 @@ describe('PII Scrubber - Label-Based Name Detection', () => {
 
   it('should detect names with titles', () => {
     const tests = [
-      { text: 'Patient Name: Dr. Jane Smith', expected: 'Dr. Jane Smith' },
-      { text: 'Name: Mr. John Doe', expected: 'Mr. John Doe' },
-      { text: 'Full Name: Mrs. Mary Johnson', expected: 'Mrs. Mary Johnson' },
-      { text: 'Patient: Ms. Sarah Williams', expected: 'Ms. Sarah Williams' }
+      { text: `Patient Name: Dr. ${TEST_PII.NAME_DOCTOR}`, expected: `Dr. ${TEST_PII.NAME_DOCTOR}` },
+      { text: `Name: Mr. ${TEST_PII.NAME_PATIENT}`, expected: `Mr. ${TEST_PII.NAME_PATIENT}` },
+      { text: `Full Name: Nurse ${TEST_PII.NAME_NURSE}`, expected: `Nurse ${TEST_PII.NAME_NURSE}` },
+      { text: `Patient: Ms. ${TEST_PII.NAME_DOCTOR}`, expected: `Ms. ${TEST_PII.NAME_DOCTOR}` }
     ];
 
     tests.forEach(({ text, expected }) => {
@@ -428,8 +429,8 @@ describe('PII Scrubber - Label-Based Name Detection', () => {
 
   it('should detect names with middle names', () => {
     const tests = [
-      { text: 'Patient Name: John Michael Smith', expected: 'John Michael Smith' },
-      { text: 'Name: Mary Ann Johnson', expected: 'Mary Ann Johnson' }
+      { text: `Patient Name: ${TEST_PII.NAME_PATIENT} Michael`, expected: `${TEST_PII.NAME_PATIENT} Michael` },
+      { text: `Name: ${TEST_PII.NAME_DOCTOR} Ann`, expected: `${TEST_PII.NAME_DOCTOR} Ann` }
     ];
 
     tests.forEach(({ text, expected }) => {
@@ -441,10 +442,10 @@ describe('PII Scrubber - Label-Based Name Detection', () => {
 
   it('should detect names with JSON-style labels', () => {
     const tests = [
-      'patientName: Alice Brown',
-      'patient_name: Michael Green',
-      'fullName: Jennifer White',
-      'full_name: David Lee'
+      `patientName: ${TEST_PII.NAME_PATIENT}`,
+      `patient_name: ${TEST_PII.NAME_DOCTOR}`,
+      `fullName: ${TEST_PII.NAME_NURSE}`,
+      `full_name: ${TEST_PII.NAME_PATIENT}`
     ];
 
     tests.forEach(text => {
@@ -455,19 +456,19 @@ describe('PII Scrubber - Label-Based Name Detection', () => {
 
   it('should handle multiple labeled names in text', () => {
     const text = `
-      Patient Name: John Smith
-      Name: Mary Johnson
-      Full Name: Robert Williams
+      Patient Name: ${TEST_PII.NAME_PATIENT}
+      Name: ${TEST_PII.NAME_DOCTOR}
+      Full Name: ${TEST_PII.NAME_NURSE}
     `;
     const matches = detectLabeledName(text);
     expect(matches.length).toBeGreaterThanOrEqual(3);
   });
 
   it('should provide correct start and end positions', () => {
-    const text = 'Patient Name: John Smith';
+    const text = `Patient Name: ${TEST_PII.NAME_PATIENT}`;
     const matches = detectLabeledName(text);
     expect(matches).toHaveLength(1);
-    expect(text.substring(matches[0].start, matches[0].end)).toBe('John Smith');
+    expect(text.substring(matches[0].start, matches[0].end)).toBe(TEST_PII.NAME_PATIENT);
   });
 
   it('should not match standalone names without labels', () => {
@@ -478,9 +479,9 @@ describe('PII Scrubber - Label-Based Name Detection', () => {
 
   it('should handle case-insensitive labels', () => {
     const tests = [
-      'patient name: John Smith',
-      'PATIENT NAME: Mary Johnson',
-      'Patient Name: Robert Williams'
+      `patient name: ${TEST_PII.NAME_PATIENT}`,
+      `PATIENT NAME: ${TEST_PII.NAME_DOCTOR}`,
+      `Patient Name: ${TEST_PII.NAME_NURSE}`
     ];
 
     tests.forEach(text => {

@@ -2,7 +2,7 @@
   "name": "Scrubah.PII",
   "version": "1.0.0",
   "description": "Forensic medical data sanitizer with zero-trust PII scrubbing, content-based deduplication, structured lab extraction, and LLM-optimized timeline generation. 100% local, WASM-powered, HIPAA-friendly.",
-  "author": "Heyoub (https://github.com/Heyoub)",
+  "author": "Heyoub <hello@forgestack.app>",
   "license": "MIT",
   "repository": {
     "type": "git",

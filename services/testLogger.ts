@@ -102,6 +102,6 @@ export const testLogger = {
  *
  * Run with verbose logging:
  * ```bash
- * VITEST_VERBOSE=true npm test
+ * VITEST_VERBOSE=true pnpm test
  * ```
  */

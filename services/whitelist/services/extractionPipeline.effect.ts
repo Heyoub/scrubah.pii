@@ -16,7 +16,7 @@
 import { Effect, pipe, Array as A } from "effect";
 import { extractMedicalData, type ExtractionInput } from "./medicalExtractor.effect";
 import { formatMedicalTimeline } from "./timelineFormatter.effect";
-import type { ExtractedMedicalRecord } from "../../../schemas/index";
+import type { ExtractedMedicalRecord } from "../../../schemas/schemas";
 import { ExtractionErrorCollector, type MedicalExtractionError } from "./extractionErrors";
 
 // ============================================================================

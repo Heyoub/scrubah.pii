@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { formatToMarkdown } from './markdownFormatter';
-import { ProcessedFile, ProcessingStage, ScrubResult } from '../schemas';
+import { formatToMarkdownSync as formatToMarkdown } from '../services/markdownFormatter.effect';
+import { ProcessedFile, ProcessingStage, ScrubResult } from '../schemas/schemas';
 import { markAsScrubbed } from '../schemas/phi';
 
 describe('Markdown Formatter', () => {

@@ -44,7 +44,7 @@ We welcome feature suggestions! Please open an issue with:
 3. **Install dependencies**
 
    ```bash
-   npm install
+   pnpm install
    ```
 
 4. **Make your changes**
@@ -55,9 +55,9 @@ We welcome feature suggestions! Please open an issue with:
 5. **Run tests and linting**
 
    ```bash
-   npm test
-   npm run build  # Ensures TypeScript compiles
-   npm run lint
+   pnpm test
+   pnpm run build  # Ensures TypeScript compiles
+   pnpm run lint
    ```
 
 6. **Commit your changes**

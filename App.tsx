@@ -16,12 +16,12 @@ import { clsx } from 'clsx';
 
 import { DropZone } from './components/DropZone';
 import { StatusBoard } from './components/StatusBoard';
-import { parseFile } from './services/fileParser';
-import { piiScrubber } from './services/piiScrubber';
-import { formatToMarkdown } from './services/markdownFormatter';
-import { buildMasterTimeline } from './services/timelineOrganizer';
+import { runParseFile as parseFile } from './services/fileParser.effect';
+import { loadModel, runScrubPII as scrubPII } from './services/piiScrubber.effect';
+import { formatToMarkdownSync as formatToMarkdown } from './services/markdownFormatter.effect';
+import { runBuildMasterTimeline as buildMasterTimeline } from './services/timelineOrganizer.effect';
 import { db } from './services/db';
-import { ProcessedFile, ProcessingStage } from './schemas';
+import { ProcessedFile, ProcessingStage } from './schemas/schemas';
 
 const App: React.FC = () => {
   const [files, setFiles] = useState<ProcessedFile[]>([]);
@@ -35,7 +35,7 @@ const App: React.FC = () => {
       setModelLoading(true);
       setModelError(null);
       try {
-        await piiScrubber.loadModel();
+        await loadModel();
       } catch (e) {
         const errorMsg = e instanceof Error ? e.message : 'Unknown error loading ML model';
         console.error("Model failed to load", e);
@@ -45,7 +45,7 @@ const App: React.FC = () => {
       }
     };
     initModel();
-    
+
     db.files.toArray().then(savedFiles => {
       if (savedFiles.length > 0) {
         setFiles(savedFiles);
@@ -55,7 +55,7 @@ const App: React.FC = () => {
 
   const handleFilesDropped = useCallback(async (droppedFiles: File[]) => {
     if (!modelLoading) {
-        piiScrubber.loadModel().catch(console.error);
+      loadModel().catch(console.error);
     }
 
     const newFiles: ProcessedFile[] = droppedFiles.map(f => ({
@@ -85,11 +85,11 @@ const App: React.FC = () => {
 
         // 2. Scrubbing Stage
         updateFileStatus(fileEntry.id, ProcessingStage.SCRUBBING, { rawText });
-        const scrubResult = await piiScrubber.scrub(rawText);
+        const scrubResult = await scrubPII(rawText);
 
         // 3. Formatting Stage
         updateFileStatus(fileEntry.id, ProcessingStage.FORMATTING);
-        
+
         const processingTimeMs = performance.now() - startTime;
         const markdown = formatToMarkdown(fileEntry, scrubResult, processingTimeMs);
 
@@ -105,13 +105,14 @@ const App: React.FC = () => {
           markdown,
           stats
         };
-        
+
         updateFileState(fileEntry.id, completedFile);
         await db.files.put(completedFile);
 
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
         console.error(`Error processing ${fileEntry.originalName}`, error);
-        updateFileStatus(fileEntry.id, ProcessingStage.ERROR, { error: error.message });
+        updateFileStatus(fileEntry.id, ProcessingStage.ERROR, { error: errorMessage });
       }
     }
 
@@ -130,7 +131,7 @@ const App: React.FC = () => {
     setModelLoading(true);
     setModelError(null);
     try {
-      await piiScrubber.loadModel();
+      await loadModel();
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : 'Unknown error loading ML model';
       console.error("Model failed to load", e);
@@ -227,49 +228,49 @@ const App: React.FC = () => {
               <ShieldAlert className="w-6 h-6 text-white" />
             </div>
             <div>
-               <h1 className="text-2xl font-black tracking-tighter uppercase leading-none">
+              <h1 className="text-2xl font-black tracking-tighter uppercase leading-none">
                 Scrubah<span className="text-accent-600">.PII</span>
               </h1>
               <span className="text-[10px] font-mono font-bold tracking-widest text-zinc-500 uppercase">Forensic Data Sanitizer</span>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-6">
-             <div className="hidden md:flex flex-col text-right">
-                <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase">Status</span>
-                <div className="flex items-center gap-2">
-                    {modelLoading ? (
-                        <>
-                            <RefreshCw className="w-3 h-3 animate-spin text-accent-600" />
-                            <span className="text-xs font-bold">LOADING_MODEL...</span>
-                        </>
-                    ) : modelError ? (
-                        <>
-                             <span className="w-2 h-2 bg-rose-500 rounded-full animate-pulse"></span>
-                             <span className="text-xs font-bold text-rose-600">MODEL_ERROR</span>
-                        </>
-                    ) : (
-                        <>
-                             <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
-                             <span className="text-xs font-bold">SYSTEM_READY</span>
-                        </>
-                    )}
-                </div>
-             </div>
-             
-             <a href="https://github.com/Heyoub" target="_blank" rel="noreferrer" className="p-2 border-2 border-transparent hover:border-black hover:bg-zinc-100 transition-all rounded-sm">
-                <Github className="w-5 h-5" />
-             </a>
+            <div className="hidden md:flex flex-col text-right">
+              <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase">Status</span>
+              <div className="flex items-center gap-2">
+                {modelLoading ? (
+                  <>
+                    <RefreshCw className="w-3 h-3 animate-spin text-accent-600" />
+                    <span className="text-xs font-bold">LOADING_MODEL...</span>
+                  </>
+                ) : modelError ? (
+                  <>
+                    <span className="w-2 h-2 bg-rose-500 rounded-full animate-pulse"></span>
+                    <span className="text-xs font-bold text-rose-600">MODEL_ERROR</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
+                    <span className="text-xs font-bold">SYSTEM_READY</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <a href="https://github.com/Heyoub" target="_blank" rel="noreferrer" className="p-2 border-2 border-transparent hover:border-black hover:bg-zinc-100 transition-all rounded-sm">
+              <Github className="w-5 h-5" />
+            </a>
           </div>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-16 space-y-10">
-        
+
         {/* Hero Section */}
         <div className="space-y-4 mb-12">
           <h2 className="text-4xl md:text-5xl font-black text-black tracking-tight leading-[0.9]">
-            SANITIZE YOUR DATA. <br/>
+            SANITIZE YOUR DATA. <br />
             <span className="text-zinc-400">KEEP IT LOCAL.</span>
           </h2>
           <p className="text-lg font-mono text-zinc-600 max-w-2xl leading-relaxed">
@@ -398,19 +399,19 @@ const App: React.FC = () => {
         <div className="mt-20 border-t-2 border-zinc-200 pt-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 text-zinc-400 font-mono text-xs">
           <div className="flex gap-6">
             <div className="flex items-center gap-2">
-                <Cpu className="w-4 h-4" />
-                <span>Local_WASM_Runtime</span>
+              <Cpu className="w-4 h-4" />
+              <span>Local_WASM_Runtime</span>
             </div>
             <div className="flex items-center gap-2">
-                <ShieldAlert className="w-4 h-4" />
-                <span>Hybrid_Scrub_v1</span>
+              <ShieldAlert className="w-4 h-4" />
+              <span>Hybrid_Scrub_v1</span>
             </div>
           </div>
-          
+
           <div className="flex flex-col md:items-end gap-1">
             <span className="font-bold text-black">© 2025 Forgestack.app</span>
             <a href="mailto:hello@forgestack.app" className="hover:text-accent-600 flex items-center gap-1">
-                <Mail className="w-3 h-3" /> hello@forgestack.app
+              <Mail className="w-3 h-3" /> hello@forgestack.app
             </a>
           </div>
         </div>

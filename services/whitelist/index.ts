@@ -14,7 +14,7 @@
  */
 
 // Schemas
-export * from "../../schemas/index";
+export * from "../../schemas/schemas";
 
 // Errors
 export * from "./services/extractionErrors";

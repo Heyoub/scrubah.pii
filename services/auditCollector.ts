@@ -11,7 +11,7 @@ import {
   type AuditEntry,
   type AuditSummary,
   type AuditReport,
-} from '../schemas';
+} from '../schemas/schemas';
 
 // Re-export for backward compatibility
 export type { AuditEntry, AuditSummary, AuditReport };

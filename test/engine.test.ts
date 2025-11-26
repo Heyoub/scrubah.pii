@@ -3,8 +3,8 @@ import {
   runCompression,
   ProcessedDocument,
   defaultCompressionOptions,
-} from './index';
-import { markAsScrubbed } from '../../schemas/phi';
+} from '../services/compression/index';
+import { markAsScrubbed } from '../schemas/phi';
 
 const scrub = (text: string) => markAsScrubbed(text);
 
@@ -63,7 +63,7 @@ describe('Compression Engine', () => {
       const result = await runCompression([doc], defaultCompressionOptions);
 
       const ambiguityErrors = result.errors.getAll().filter(
-        e => e.type === 'DateAmbiguityError'
+        e => e._tag === 'DateAmbiguityError'
       );
       expect(ambiguityErrors.length).toBeGreaterThan(0);
     });
@@ -325,7 +325,7 @@ describe('Compression Engine', () => {
       });
 
       const sizeErrors = result.errors.getAll().filter(
-        e => e.type === 'CompressionSizeExceededError'
+        e => e._tag === 'CompressionSizeExceededError'
       );
       expect(sizeErrors.length).toBeGreaterThan(0);
     });

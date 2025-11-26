@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { ProcessedFile, ProcessingStage } from '../schemas';
+import { ProcessedFile, ProcessingStage } from '../schemas/schemas';
 import {
   Loader2,
   CheckSquare,
@@ -34,7 +34,7 @@ export const StatusBoard: React.FC<StatusBoardProps> = ({ files, onDownload }) =
       <div className="divide-y-2 divide-black font-mono text-sm">
         {files.map((file) => (
           <div key={file.id} className="px-4 py-3 flex items-center gap-4 hover:bg-zinc-50 transition-colors group">
-            
+
             {/* Status Indicator */}
             <div className="shrink-0">
               {file.stage === ProcessingStage.COMPLETED ? (
@@ -51,15 +51,15 @@ export const StatusBoard: React.FC<StatusBoardProps> = ({ files, onDownload }) =
               <div className="col-span-5 truncate font-bold text-black">
                 {file.originalName}
               </div>
-              
+
               <div className="col-span-4 flex items-center gap-2">
-                 {/* Brutalist Progress Bar */}
+                {/* Brutalist Progress Bar */}
                 <div className="h-3 w-full border border-black bg-white p-[1px]">
-                  <div 
+                  <div
                     className={clsx(
                       "h-full transition-all duration-300 ease-linear",
-                      file.stage === ProcessingStage.ERROR ? "bg-rose-600" : 
-                      file.stage === ProcessingStage.COMPLETED ? "bg-emerald-600" : "bg-accent-600 repeating-stripes"
+                      file.stage === ProcessingStage.ERROR ? "bg-rose-600" :
+                        file.stage === ProcessingStage.COMPLETED ? "bg-emerald-600" : "bg-accent-600 repeating-stripes"
                     )}
                     style={{ width: getProgressWidth(file.stage) }}
                   />
@@ -67,7 +67,7 @@ export const StatusBoard: React.FC<StatusBoardProps> = ({ files, onDownload }) =
               </div>
 
               <div className="col-span-3 text-right text-xs text-zinc-500">
-                 {(file.size / 1024).toFixed(1)} KB
+                {(file.size / 1024).toFixed(1)} KB
               </div>
             </div>
 
@@ -76,21 +76,21 @@ export const StatusBoard: React.FC<StatusBoardProps> = ({ files, onDownload }) =
               <div>
                 {file.stage === ProcessingStage.COMPLETED ? (
                   <div className="flex flex-col items-end">
-                     <span className="bg-emerald-100 text-emerald-800 px-1 border border-emerald-800 text-[10px] font-bold">CLEAN</span>
-                     {file.stats && (
+                    <span className="bg-emerald-100 text-emerald-800 px-1 border border-emerald-800 text-[10px] font-bold">CLEAN</span>
+                    {file.stats && (
                       <span className="text-[10px] mt-1 text-zinc-500">
                         -{file.stats.piiRemovedCount} Entities
                       </span>
-                     )}
+                    )}
                   </div>
                 ) : file.stage === ProcessingStage.ERROR ? (
-                   <span className="bg-rose-100 text-rose-800 px-1 border border-rose-800 text-[10px] font-bold">FAIL</span>
+                  <span className="bg-rose-100 text-rose-800 px-1 border border-rose-800 text-[10px] font-bold">FAIL</span>
                 ) : (
                   <div className="flex flex-col items-end">
-                     <span className="bg-accent-100 text-accent-800 px-1 border border-accent-800 text-[10px] font-bold animate-pulse">{file.stage}</span>
-                     <span className="text-[10px] mt-1 flex items-center gap-1">
-                       <Cpu className="w-3 h-3" /> Processing
-                     </span>
+                    <span className="bg-accent-100 text-accent-800 px-1 border border-accent-800 text-[10px] font-bold animate-pulse">{file.stage}</span>
+                    <span className="text-[10px] mt-1 flex items-center gap-1">
+                      <Cpu className="w-3 h-3" /> Processing
+                    </span>
                   </div>
                 )}
               </div>
@@ -109,7 +109,7 @@ export const StatusBoard: React.FC<StatusBoardProps> = ({ files, onDownload }) =
           </div>
         ))}
       </div>
-      
+
       {/* Log Footer */}
       <div className="bg-zinc-100 border-t-2 border-black px-4 py-2 text-[10px] font-mono text-zinc-500 uppercase flex justify-between">
         <span>Engine: Scrubah.PII-v1</span>

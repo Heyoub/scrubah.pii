@@ -16,6 +16,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { loadModel, runScrubPII } from '../services/piiScrubber.effect';
 import { mightContainPII } from '../schemas/phi';
+import { TEST_PII } from '../services/testConstants';
 
 // ============================================================================
 // SETUP
@@ -94,7 +95,7 @@ const assertNoPII = (scrubbedText: string, description: string) => {
 
 describe('PII Leak Detection - Basic Patterns', () => {
   it('should scrub full names (First Last)', async () => {
-    const text = 'Patient John Smith was admitted on 03/15/2024.';
+    const text = `Patient ${TEST_PII.NAME_PATIENT} was admitted on 03/15/2024.`;
     const result = await runScrubPII(text);
 
     assertNoPII(result.text, 'full name');
@@ -102,7 +103,7 @@ describe('PII Leak Detection - Basic Patterns', () => {
   });
 
   it('should scrub full names with titles (Dr., Mr., Ms.)', async () => {
-    const text = 'Dr. Sarah Johnson treated Mr. Michael Brown yesterday.';
+    const text = `Dr. ${TEST_PII.NAME_DOCTOR} treated Mr. ${TEST_PII.NAME_NURSE} yesterday.`;
     const result = await runScrubPII(text);
 
     assertNoPII(result.text, 'names with titles');
@@ -110,7 +111,7 @@ describe('PII Leak Detection - Basic Patterns', () => {
   });
 
   it('should scrub Social Security Numbers (all formats)', async () => {
-    const text = 'SSN: 123-45-6789 and also 987654321 for verification.';
+    const text = `SSN: ${TEST_PII.SSN_PRIMARY} and also ${TEST_PII.SSN_PRIMARY.replace(/-/g, '')} for verification.`;
     const result = await runScrubPII(text);
 
     assertNoPII(result.text, 'SSN');
@@ -120,7 +121,7 @@ describe('PII Leak Detection - Basic Patterns', () => {
   });
 
   it('should scrub phone numbers (all formats)', async () => {
-    const text = 'Call 555-123-4567 or (555) 987-6543 or 5551234567.';
+    const text = `Call ${TEST_PII.PHONE_PRIMARY} or (555) 987-6543 or 5551234567.`;
     const result = await runScrubPII(text);
 
     assertNoPII(result.text, 'phone numbers');
@@ -128,7 +129,7 @@ describe('PII Leak Detection - Basic Patterns', () => {
   });
 
   it('should scrub email addresses', async () => {
-    const text = 'Contact john.doe@example.com or patient@hospital.org.';
+    const text = `Contact ${TEST_PII.EMAIL_PRIMARY} or ${TEST_PII.EMAIL_SECONDARY}.`;
     const result = await runScrubPII(text);
 
     assertNoPII(result.text, 'email addresses');
@@ -167,21 +168,21 @@ describe('PII Leak Detection - Basic Patterns', () => {
 
 describe('PII Leak Detection - Edge Cases', () => {
   it('should scrub names with middle initials', async () => {
-    const text = 'John Q. Public was treated by Dr. Mary A. Johnson.';
+    const text = `${TEST_PII.NAME_PATIENT} Q. was treated by Dr. ${TEST_PII.NAME_DOCTOR}.`;
     const result = await runScrubPII(text);
 
     assertNoPII(result.text, 'names with middle initials');
   });
 
   it('should scrub hyphenated names', async () => {
-    const text = 'Mary-Jane Smith-Williams visited the clinic.';
+    const text = `${TEST_PII.NAME_DOCTOR}-${TEST_PII.NAME_NURSE} visited the clinic.`;
     const result = await runScrubPII(text);
 
     assertNoPII(result.text, 'hyphenated names');
   });
 
   it('should scrub names with suffixes (Jr., Sr., III)', async () => {
-    const text = 'John Smith Jr. and Robert Johnson III were consulted.';
+    const text = `${TEST_PII.NAME_PATIENT} Jr. and ${TEST_PII.NAME_DOCTOR} III were consulted.`;
     const result = await runScrubPII(text);
 
     assertNoPII(result.text, 'names with suffixes');
@@ -291,7 +292,7 @@ describe('PII Leak Detection - Multi-Pass Validation', () => {
 
 describe('PII Leak Detection - Known False Negatives', () => {
   it('should scrub names in lowercase (case variation)', async () => {
-    const text = 'patient john smith was admitted.';
+    const text = `patient ${TEST_PII.NAME_PATIENT.toLowerCase()} was admitted.`;
     const result = await runScrubPII(text);
 
     // ML model should catch this even if regex doesn't
@@ -299,7 +300,7 @@ describe('PII Leak Detection - Known False Negatives', () => {
   });
 
   it('should scrub names in UPPERCASE', async () => {
-    const text = 'PATIENT JOHN SMITH WAS ADMITTED.';
+    const text = `PATIENT ${TEST_PII.NAME_PATIENT.toUpperCase()} WAS ADMITTED.`;
     const result = await runScrubPII(text);
 
     // Should detect as name pattern
@@ -338,16 +339,16 @@ describe('PII Leak Detection - Medical Context', () => {
   });
 
   it('should scrub patient names but keep medication names', async () => {
-    const text = 'John Smith prescribed Metformin 500mg twice daily.';
+    const text = `${TEST_PII.NAME_PATIENT} prescribed Metformin 500mg twice daily.`;
     const result = await runScrubPII(text);
 
     // Patient name scrubbed, medication kept
-    expect(result.text).not.toContain('John Smith');
+    expect(result.text).not.toContain(TEST_PII.NAME_PATIENT);
     expect(result.text).toContain('Metformin');
   });
 
   it('should scrub physician names but keep medical procedures', async () => {
-    const text = 'Dr. Sarah Johnson performed appendectomy on patient.';
+    const text = `Dr. ${TEST_PII.NAME_DOCTOR} performed appendectomy on patient.`;
     const result = await runScrubPII(text);
 
     // Doctor name scrubbed, procedure kept
@@ -363,11 +364,11 @@ describe('PII Leak Detection - Medical Context', () => {
 describe('PII Leak Detection - Real-World Scenarios', () => {
   it('should scrub discharge summary header', async () => {
     const text = `DISCHARGE SUMMARY
-Patient Name: John Doe
-DOB: 01/15/1980
-MRN: 123456
+Patient Name: ${TEST_PII.NAME_PATIENT}
+DOB: ${TEST_PII.DATE_BIRTH}
+MRN: ${TEST_PII.MRN_PRIMARY}
 Date of Admission: 03/01/2024
-Attending Physician: Dr. Sarah Johnson`;
+Attending Physician: Dr. ${TEST_PII.NAME_DOCTOR}`;
 
     const result = await runScrubPII(text);
 
@@ -377,8 +378,8 @@ Attending Physician: Dr. Sarah Johnson`;
 
   it('should scrub SOAP note with patient details', async () => {
     const text = `SUBJECTIVE:
-Patient John Smith (DOB 05/20/1975, MRN 789012) presents with chest pain.
-He can be reached at 555-123-4567 or john.smith@email.com.
+Patient ${TEST_PII.NAME_PATIENT} (DOB ${TEST_PII.DATE_BIRTH}, MRN ${TEST_PII.MRN_PRIMARY}) presents with chest pain.
+He can be reached at ${TEST_PII.PHONE_PRIMARY} or ${TEST_PII.EMAIL_PRIMARY}.
 
 OBJECTIVE:
 Vital signs: BP 140/90, HR 88, Temp 98.6F`;
@@ -391,13 +392,13 @@ Vital signs: BP 140/90, HR 88, Temp 98.6F`;
 
   it('should scrub lab report with patient info', async () => {
     const text = `LABORATORY REPORT
-Patient: Mary Johnson
-SSN: 123-45-6789
+Patient: ${TEST_PII.NAME_DOCTOR}
+SSN: ${TEST_PII.SSN_PRIMARY}
 Collected: 03/15/2024
 
 WBC: 7.5 K/µL (Normal)
 HGB: 14.2 g/dL (Normal)
-Ordered by: Dr. Michael Brown`;
+Ordered by: Dr. ${TEST_PII.NAME_NURSE}`;
 
     const result = await runScrubPII(text);
 
@@ -415,7 +416,7 @@ Ordered by: Dr. Michael Brown`;
 
 describe('PII Leak Detection - Confidence Validation', () => {
   it('should have high confidence for obvious PII', async () => {
-    const text = 'John Doe, SSN: 123-45-6789, Phone: 555-1234.';
+    const text = `${TEST_PII.NAME_PATIENT}, SSN: ${TEST_PII.SSN_PRIMARY}, Phone: 555-1234.`;
     const result = await runScrubPII(text);
 
     // High confidence (>= 90%) for clear PII patterns
@@ -425,7 +426,7 @@ describe('PII Leak Detection - Confidence Validation', () => {
   });
 
   it('should flag low confidence PII for review', async () => {
-    const text = 'Patient J. Smith mentioned something about the year 1980.';
+    const text = `Patient J. ${TEST_PII.NAME_PATIENT} mentioned something about the year 1980.`;
     const result = await runScrubPII(text);
 
     // Ambiguous patterns should be flagged
@@ -450,7 +451,7 @@ describe('PII Leak Detection - Regression Tests', () => {
   });
 
   it('should not leak names when followed by punctuation', async () => {
-    const text = 'John Doe, Jane Smith; Robert Johnson.';
+    const text = `${TEST_PII.NAME_PATIENT}, ${TEST_PII.NAME_DOCTOR}; ${TEST_PII.NAME_NURSE}.`;
     const result = await runScrubPII(text);
 
     assertNoPII(result.text, 'names with punctuation');
@@ -458,7 +459,7 @@ describe('PII Leak Detection - Regression Tests', () => {
   });
 
   it('should scrub emails even when embedded in URLs', async () => {
-    const text = 'Visit mailto:john.doe@example.com or contact us.';
+    const text = `Visit mailto:${TEST_PII.EMAIL_PRIMARY} or contact us.`;
     const result = await runScrubPII(text);
 
     assertNoPII(result.text, 'emails in URLs');

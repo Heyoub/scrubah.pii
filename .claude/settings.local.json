@@ -1,10 +1,19 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm start)",
-      "Bash(npm install:*)",
+      "Bash(pnpm start)",
+      "Bash(pnpm install:*)",
       "Bash(npx tsc:*)",
-      "Bash(npm test:*)"
+      "Bash(pnpm test:*)",
+      "Bash(git push:*)",
+      "Bash(git log:*)",
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "Bash(git show-ref:*)",
+      "Bash(git fsck:*)",
+      "Bash(xargs:*)",
+      "Bash(pnpm exec grep:*)",
+      "Bash(pnpm exec tsc:*)"
     ],
     "deny": [],
     "ask": []

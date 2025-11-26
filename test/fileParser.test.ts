@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
-import { parseFile } from './fileParser';
+import { runParseFile as parseFile } from '../services/fileParser.effect';
+import { TEST_PII } from '../services/testConstants';
 
 // Mock external dependencies
 vi.mock('pdfjs-dist', () => ({
@@ -33,7 +34,7 @@ describe('File Parser - Text Files', () => {
   });
 
   it('should parse CSV files', async () => {
-    const content = 'Name,Age,Email\nJohn,30,john@example.com';
+    const content = `Name,Age,Email\nTest,30,${TEST_PII.EMAIL_PRIMARY}`;
     const file = new File([content], 'test.csv', { type: 'text/csv' });
 
     const result = await parseFile(file);
@@ -240,9 +241,9 @@ describe('File Parser - Real-world Scenarios', () => {
   it('should parse a medical report in text format', async () => {
     const medicalReport = `
 MEDICAL REPORT
-Patient: John Doe
-MRN: 123456
-Date: 01/15/2024
+Patient: ${TEST_PII.NAME_PATIENT}
+MRN: ${TEST_PII.MRN_PRIMARY}
+Date: ${TEST_PII.DATE_VISIT}
 
 DIAGNOSIS:
 The patient presented with symptoms of...
@@ -257,19 +258,19 @@ TREATMENT PLAN:
 
     expect(result).toBe(medicalReport);
     expect(result).toContain('MEDICAL REPORT');
-    expect(result).toContain('MRN: 123456');
+    expect(result).toContain(`MRN: ${TEST_PII.MRN_PRIMARY}`);
   });
 
   it('should parse CSV patient data', async () => {
     const csvData = `PatientID,Name,DOB,Diagnosis
-P001,John Doe,01/15/1980,Hypertension
-P002,Jane Smith,03/22/1975,Diabetes`;
+P001,${TEST_PII.NAME_PATIENT},${TEST_PII.DATE_BIRTH},Hypertension
+P002,${TEST_PII.NAME_NURSE},03/22/1975,Diabetes`;
 
     const file = new File([csvData], 'patients.csv', { type: 'text/csv' });
     const result = await parseFile(file);
 
     expect(result).toBe(csvData);
     expect(result).toContain('PatientID');
-    expect(result).toContain('John Doe');
+    expect(result).toContain(TEST_PII.NAME_PATIENT);
   });
 });

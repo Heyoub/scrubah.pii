@@ -17,6 +17,7 @@
  */
 
 import { Effect, pipe } from "effect";
+import { ProcessedFile, ScrubResult } from "../schemas/schemas";
 
 // ============================================================================
 // TYPES
@@ -38,24 +39,6 @@ export interface FrontmatterMetadata {
   readonly processing_seconds: string;
   readonly hipaa_compliant: boolean;
   readonly [key: string]: string | number | boolean | undefined;
-}
-
-/**
- * Processed file input
- */
-export interface ProcessedFile {
-  readonly originalName: string;
-  readonly size?: number;
-  readonly type?: string;
-}
-
-/**
- * Scrub result from PII scrubber
- */
-export interface ScrubResult {
-  readonly text: string;
-  readonly count: number;
-  readonly confidence?: number;
 }
 
 /**

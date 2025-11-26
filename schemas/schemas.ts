@@ -12,7 +12,7 @@
  */
 
 import { Schema as S, pipe } from "effect";
-import type { ScrubbedText } from "./schemas/phi";
+import type { ScrubbedText } from "./phi";
 
 /**
  * PROCESSING STAGE (Variant Type - like OCaml)

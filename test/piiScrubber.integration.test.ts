@@ -1,30 +1,30 @@
 import { describe, it, expect } from 'vitest';
-import { piiScrubber } from './piiScrubber';
-import { PATTERNS } from './piiScrubber';
-import { TEST_PII } from './testConstants';
-import { testLogger } from './testLogger';
+import { runScrubPII as scrubPII, PATTERNS } from '../services/piiScrubber.effect';
+import { TEST_PII } from '../services/testConstants';
+import { testLogger } from '../services/testLogger';
 
 /**
- * COMPREHENSIVE INTEGRATION TESTS FOR PII SCRUBBING
+ * COMPREHENSIVE INTEGRATION TESTS FOR PII SCRUBBING (Effect-TS)
  *
- * These tests use `regexOnly: true` mode to test deterministically without
- * requiring the ML model (BERT NER). This allows tests to run in Node.js.
+ * Tests the Effect-based PII scrubbing pipeline end-to-end.
+ *
+ * Architecture:
+ * - Effect-based functional pipeline with ML model integration
+ * - Railway-oriented programming (errors as values)
+ * - Hybrid detection: Regex (structural PII) + BERT NER (contextual PII)
  *
  * Tests verify:
  * 1. All structural PII types (regex-based) are detected and scrubbed
- * 2. The actual scrub() function works end-to-end
+ * 2. The actual scrubPII() function works end-to-end
  * 3. PIIMap tracks replacements accurately
  * 4. Placeholder consistency is maintained
  * 5. Real-world medical documents are properly sanitized
  *
- * ML-based tests (names/locations/orgs from BERT) require browser environment.
- * To test ML features: run the app in dev mode (`bun run start`)
+ * ML-based tests (names/locations/orgs from BERT) run in all environments
+ * since the Effect version auto-loads the model on first use.
  */
 
-// Use regexOnly mode to avoid ML model loading in Node.js
-const SCRUB_OPTIONS = { regexOnly: true };
-
-describe('PII Scrubber - Integration Tests (Deterministic, Non-Mocked)', () => {
+describe('PII Scrubber - Integration Tests (Effect-TS)', () => {
 
   describe('DATE Pattern Detection - End-to-End', () => {
     it('should detect dates in MM/DD/YYYY format', () => {
@@ -61,7 +61,7 @@ describe('PII Scrubber - Integration Tests (Deterministic, Non-Mocked)', () => {
   describe('Email Address Scrubbing - Structural Only (Deterministic)', () => {
     it('should scrub single email address', async () => {
       const text = `Contact patient at ${TEST_PII.EMAIL_PRIMARY} for follow-up.`;
-      const result = await piiScrubber.scrub(text, SCRUB_OPTIONS);
+      const result = await scrubPII(text);
 
       // Email should not appear in scrubbed text
       expect(result.text).not.toContain(TEST_PII.EMAIL_PRIMARY);
@@ -76,7 +76,7 @@ describe('PII Scrubber - Integration Tests (Deterministic, Non-Mocked)', () => {
 
     it('should scrub multiple different emails', async () => {
       const text = `Primary: ${TEST_PII.EMAIL_PRIMARY}, Secondary: ${TEST_PII.EMAIL_SECONDARY}`;
-      const result = await piiScrubber.scrub(text, SCRUB_OPTIONS);
+      const result = await scrubPII(text);
 
       expect(result.text).not.toContain(TEST_PII.EMAIL_PRIMARY);
       expect(result.text).not.toContain(TEST_PII.EMAIL_SECONDARY);
@@ -85,7 +85,7 @@ describe('PII Scrubber - Integration Tests (Deterministic, Non-Mocked)', () => {
 
     it('should maintain placeholder consistency for repeated emails', async () => {
       const text = `Email ${TEST_PII.EMAIL_REPEATED} twice: ${TEST_PII.EMAIL_REPEATED} and ${TEST_PII.EMAIL_REPEATED} again.`;
-      const result = await piiScrubber.scrub(text, SCRUB_OPTIONS);
+      const result = await scrubPII(text);
 
       // Should use same placeholder for same email
       const placeholder = result.replacements[TEST_PII.EMAIL_REPEATED];
@@ -106,7 +106,7 @@ describe('PII Scrubber - Integration Tests (Deterministic, Non-Mocked)', () => {
   describe('Phone Number Scrubbing - All Formats', () => {
     it('should scrub various phone formats', async () => {
       const text = `Call ${TEST_PII.PHONE_FORMATTED_1} or ${TEST_PII.PHONE_FORMATTED_2} for appointments.`;
-      const result = await piiScrubber.scrub(text, SCRUB_OPTIONS);
+      const result = await scrubPII(text);
 
       // Phone numbers should not appear in scrubbed text (partial matches)
       expect(result.text).not.toContain('010-4');
@@ -121,7 +121,7 @@ describe('PII Scrubber - Integration Tests (Deterministic, Non-Mocked)', () => {
 
     it('should handle phone with +1 country code', async () => {
       const text = `International: ${TEST_PII.PHONE_WITH_COUNTRY}`;
-      const result = await piiScrubber.scrub(text, SCRUB_OPTIONS);
+      const result = await scrubPII(text);
 
       expect(result.text).not.toContain('555 0103');
       expect(result.text).toMatch(/\[PHONE_\d+\]/);
@@ -131,7 +131,7 @@ describe('PII Scrubber - Integration Tests (Deterministic, Non-Mocked)', () => {
   describe('SSN Scrubbing', () => {
     it('should scrub SSN and track in PIIMap', async () => {
       const text = `Patient SSN: ${TEST_PII.SSN_PRIMARY} for insurance verification.`;
-      const result = await piiScrubber.scrub(text, SCRUB_OPTIONS);
+      const result = await scrubPII(text);
 
       // SSN should not appear in scrubbed text
       expect(result.text).not.toContain(TEST_PII.SSN_PRIMARY);
@@ -143,7 +143,7 @@ describe('PII Scrubber - Integration Tests (Deterministic, Non-Mocked)', () => {
 
     it('should scrub multiple SSNs', async () => {
       const text = `Primary: ${TEST_PII.SSN_PRIMARY}, Spouse: ${TEST_PII.SSN_SPOUSE}`;
-      const result = await piiScrubber.scrub(text, SCRUB_OPTIONS);
+      const result = await scrubPII(text);
 
       expect(result.text).not.toContain(TEST_PII.SSN_PRIMARY);
       expect(result.text).not.toContain(TEST_PII.SSN_SPOUSE);
@@ -154,7 +154,7 @@ describe('PII Scrubber - Integration Tests (Deterministic, Non-Mocked)', () => {
   describe('Credit Card Scrubbing', () => {
     it('should scrub credit card with dashes', async () => {
       const text = `Payment card: ${TEST_PII.CARD_VISA} on file.`;
-      const result = await piiScrubber.scrub(text, SCRUB_OPTIONS);
+      const result = await scrubPII(text);
 
       expect(result.text).not.toContain(TEST_PII.CARD_VISA);
       expect(result.text).toMatch(/\[CARD_\d+\]/);
@@ -163,7 +163,7 @@ describe('PII Scrubber - Integration Tests (Deterministic, Non-Mocked)', () => {
     it('should scrub credit card with spaces', async () => {
       const cardWithSpaces = TEST_PII.CARD_MASTERCARD.replace(/-/g, ' ');
       const text = `Card number: ${cardWithSpaces}`;
-      const result = await piiScrubber.scrub(text, SCRUB_OPTIONS);
+      const result = await scrubPII(text);
 
       expect(result.text).not.toContain(cardWithSpaces);
       expect(result.text).toMatch(/\[CARD_\d+\]/);
@@ -172,11 +172,11 @@ describe('PII Scrubber - Integration Tests (Deterministic, Non-Mocked)', () => {
     it('should scrub credit card without separators', async () => {
       const cardNoSeparators = TEST_PII.CARD_VISA.replace(/-/g, '');
       const text = `Card: ${cardNoSeparators}`;
-      const result = await piiScrubber.scrub(text, SCRUB_OPTIONS);
+      const result = await scrubPII(text);
 
       // Card number should be scrubbed (removed from text)
       expect(result.text).not.toContain(cardNoSeparators);
-      // In regex-only mode, 16 continuous digits may match as PHONE+ID instead of CARD
+      // 16 continuous digits may match as PHONE+ID instead of CARD
       // The important thing is the PII is scrubbed - verify some placeholder exists
       expect(result.text).toMatch(/\[[A-Z_]+_\d+\]/);
     }, 30000);
@@ -185,7 +185,7 @@ describe('PII Scrubber - Integration Tests (Deterministic, Non-Mocked)', () => {
   describe('ZIP Code Scrubbing', () => {
     it('should scrub 5-digit ZIP code', async () => {
       const text = `Located in ZIP ${TEST_PII.ZIP_5_DIGIT}`;
-      const result = await piiScrubber.scrub(text, SCRUB_OPTIONS);
+      const result = await scrubPII(text);
 
       expect(result.text).not.toContain(TEST_PII.ZIP_5_DIGIT);
       expect(result.text).toMatch(/\[ZIP_\d+\]/);
@@ -193,7 +193,7 @@ describe('PII Scrubber - Integration Tests (Deterministic, Non-Mocked)', () => {
 
     it('should scrub ZIP+4 format', async () => {
       const text = `Mailing address: Testville, TS ${TEST_PII.ZIP_PLUS_4}`;
-      const result = await piiScrubber.scrub(text, SCRUB_OPTIONS);
+      const result = await scrubPII(text);
 
       expect(result.text).not.toContain(TEST_PII.ZIP_PLUS_4);
       expect(result.text).toMatch(/\[ZIP_\d+\]/);
@@ -203,7 +203,7 @@ describe('PII Scrubber - Integration Tests (Deterministic, Non-Mocked)', () => {
   describe('Medical Record Number (MRN) Scrubbing', () => {
     it('should scrub MRN with MRN keyword', async () => {
       const text = `Patient MRN: ${TEST_PII.MRN_PRIMARY} admitted today.`;
-      const result = await piiScrubber.scrub(text, SCRUB_OPTIONS);
+      const result = await scrubPII(text);
 
       expect(result.text).not.toContain(TEST_PII.MRN_PRIMARY);
       expect(result.replacements[TEST_PII.MRN_PRIMARY]).toBeDefined();
@@ -217,7 +217,7 @@ describe('PII Scrubber - Integration Tests (Deterministic, Non-Mocked)', () => {
         Patient ID: ${TEST_PII.MRN_FORMATTED}
         Chart Number: ${TEST_PII.MRN_PRIMARY}
       `;
-      const result = await piiScrubber.scrub(text, SCRUB_OPTIONS);
+      const result = await scrubPII(text);
 
       expect(result.text).not.toContain(TEST_PII.MRN_PRIMARY);
       expect(result.text).not.toContain(TEST_PII.MRN_SECONDARY);
@@ -234,7 +234,7 @@ describe('PII Scrubber - Integration Tests (Deterministic, Non-Mocked)', () => {
       ];
 
       for (const text of tests) {
-        const result = await piiScrubber.scrub(text, SCRUB_OPTIONS);
+        const result = await scrubPII(text);
         expect(result.count).toBeGreaterThanOrEqual(1);
         expect(result.text).toMatch(/\[MRN_\d+\]/);
       }
@@ -275,7 +275,7 @@ ZIP Code: ${TEST_PII.ZIP_PLUS_4}
 Payment Card: ${TEST_PII.CARD_VISA}
       `;
 
-      const result = await piiScrubber.scrub(medicalNote, SCRUB_OPTIONS);
+      const result = await scrubPII(medicalNote);
 
       // === VERIFY ALL STRUCTURAL PII TYPES ARE SCRUBBED ===
 
@@ -339,7 +339,7 @@ Payment Card: ${TEST_PII.CARD_VISA}
   describe('PIIMap Verification', () => {
     it('should return accurate PIIMap with all original->placeholder mappings', async () => {
       const text = `Patient ${TEST_PII.EMAIL_PRIMARY}, SSN: ${TEST_PII.SSN_PRIMARY}, Phone: ${TEST_PII.PHONE_PRIMARY}`;
-      const result = await piiScrubber.scrub(text, SCRUB_OPTIONS);
+      const result = await scrubPII(text);
 
       // Verify replacements map structure
       expect(result.replacements).toBeDefined();
@@ -355,7 +355,7 @@ Payment Card: ${TEST_PII.CARD_VISA}
 
     it('should track all unique entities correctly', async () => {
       const text = `Email1: ${TEST_PII.EMAIL_PRIMARY}, Email2: ${TEST_PII.EMAIL_SECONDARY}, Same: ${TEST_PII.EMAIL_PRIMARY}`;
-      const result = await piiScrubber.scrub(text, SCRUB_OPTIONS);
+      const result = await scrubPII(text);
 
       // Should have 2 unique emails in replacements map
       expect(Object.keys(result.replacements).length).toBe(2);
@@ -372,7 +372,7 @@ Payment Card: ${TEST_PII.CARD_VISA}
 
   describe('Edge Cases', () => {
     it('should handle empty string gracefully', async () => {
-      const result = await piiScrubber.scrub('', SCRUB_OPTIONS);
+      const result = await scrubPII('');
 
       expect(result.text).toBe('');
       expect(result.count).toBe(0);
@@ -380,7 +380,7 @@ Payment Card: ${TEST_PII.CARD_VISA}
     }, 30000);
 
     it('should handle whitespace-only string', async () => {
-      const result = await piiScrubber.scrub('   \n\t  ', SCRUB_OPTIONS);
+      const result = await scrubPII('   \n\t  ');
 
       expect(result.count).toBe(0);
       expect(Object.keys(result.replacements).length).toBe(0);
@@ -388,7 +388,7 @@ Payment Card: ${TEST_PII.CARD_VISA}
 
     it('should handle text with no PII', async () => {
       const text = 'The patient was treated successfully and discharged.';
-      const result = await piiScrubber.scrub(text, SCRUB_OPTIONS);
+      const result = await scrubPII(text);
 
       // Text should remain intact (no structural PII)
       expect(result.text).toContain('treated');
@@ -399,7 +399,7 @@ Payment Card: ${TEST_PII.CARD_VISA}
 
     it('should handle documents with only structural PII', async () => {
       const text = `Email: ${TEST_PII.EMAIL_PRIMARY}, Phone: ${TEST_PII.PHONE_PRIMARY}, ZIP: ${TEST_PII.ZIP_5_DIGIT}`;
-      const result = await piiScrubber.scrub(text, SCRUB_OPTIONS);
+      const result = await scrubPII(text);
 
       expect(result.text).not.toContain(TEST_PII.EMAIL_PRIMARY);
       expect(result.text).not.toContain(TEST_PII.PHONE_PRIMARY);
@@ -410,7 +410,7 @@ Payment Card: ${TEST_PII.CARD_VISA}
 
     it('should not double-scrub placeholders', async () => {
       const text = `Patient email: ${TEST_PII.EMAIL_PRIMARY} and backup: ${TEST_PII.EMAIL_SECONDARY}`;
-      const result = await piiScrubber.scrub(text, SCRUB_OPTIONS);
+      const result = await scrubPII(text);
 
       // Should have placeholders, not placeholder-of-placeholder
       expect(result.text).toMatch(/\[EMAIL_\d+\]/);
@@ -434,7 +434,7 @@ Payment Card: ${TEST_PII.CARD_VISA}
       const largeDoc = paragraph.repeat(100); // ~14KB of text
 
       const startTime = performance.now();
-      const result = await piiScrubber.scrub(largeDoc, SCRUB_OPTIONS);
+      const result = await scrubPII(largeDoc);
       const processingTime = performance.now() - startTime;
 
       // Should complete in reasonable time (< 30 seconds)
@@ -460,7 +460,7 @@ Payment Card: ${TEST_PII.CARD_VISA}
       ];
 
       const fullDoc = sections.join('\n\n');
-      const result = await piiScrubber.scrub(fullDoc, SCRUB_OPTIONS);
+      const result = await scrubPII(fullDoc);
 
       // Repeated email should use same placeholder
       const emailPlaceholder = result.replacements[TEST_PII.EMAIL_PRIMARY];
@@ -480,33 +480,36 @@ Payment Card: ${TEST_PII.CARD_VISA}
 /**
  * BROWSER-ONLY TESTS FOR ML-BASED PII DETECTION
  *
- * The following tests require BERT NER model and must run in a browser.
- * To run these tests:
+ * The following tests require BERT NER model and are best run in a browser.
+ * However, the Effect version auto-loads the model, so these can also run in Node.js
+ * (though they'll be slower on first run due to model download).
  *
- * 1. Start dev server: npm run dev
+ * To run these tests in browser DevTools:
+ *
+ * 1. Start dev server: pnpm run dev
  * 2. Open browser DevTools console
  * 3. Use this test snippet:
  *
  * ```javascript
  * // Test ML-based name detection
  * async function testMLScrubbing() {
- *   const { piiScrubber } = await import('./services/piiScrubber');
+ *   const { runScrubPII } = await import('./services/piiScrubber.effect');
  *
  *   // Test 1: Person names
  *   const text1 = 'Dr. Sarah Johnson examined the patient. Nurse Michael Brown assisted.';
- *   const result1 = await piiScrubber.scrub(text1);
+ *   const result1 = await runScrubPII(text1);
  *   console.assert(!result1.text.includes('Sarah Johnson'), 'Name should be scrubbed');
  *   console.assert(result1.text.match(/\[PER_\d+\]/), 'Should have PER placeholders');
  *
  *   // Test 2: Locations
  *   const text2 = 'Patient transferred from Boston General to New York Presbyterian.';
- *   const result2 = await piiScrubber.scrub(text2);
+ *   const result2 = await runScrubPII(text2);
  *   console.assert(!result2.text.includes('Boston'), 'Location should be scrubbed');
  *   console.assert(result2.text.match(/\[LOC_\d+\]/), 'Should have LOC placeholders');
  *
  *   // Test 3: Organizations
  *   const text3 = 'Insurance: Blue Cross Blue Shield. Referred by Mayo Clinic.';
- *   const result3 = await piiScrubber.scrub(text3);
+ *   const result3 = await runScrubPII(text3);
  *   console.assert(!result3.text.includes('Mayo Clinic'), 'Org should be scrubbed');
  *   console.assert(result3.text.match(/\[ORG_\d+\]/), 'Should have ORG placeholders');
  *

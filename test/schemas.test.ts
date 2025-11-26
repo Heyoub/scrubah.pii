@@ -53,7 +53,7 @@ import {
   decodeLabPanel,
   decodeMasterTimeline,
   decodeAuditReport,
-} from './schemas';
+} from '../schemas/schemas';
 
 // ============================================================================
 // HELPER FUNCTIONS

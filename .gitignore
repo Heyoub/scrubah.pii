@@ -4,7 +4,6 @@ logs
 pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
@@ -16,7 +15,7 @@ dist-ssr
 .vscode/*
 !.vscode/extensions.json
 .idea
-.DS_Store
+.vs/
 *.suo
 *.ntvs*
 *.njsproj
@@ -40,4 +39,18 @@ build/
 .env.local
 .env.*.local
 
+# Archive
 /.archive/**
+
+# OS generated files (macOS)
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Windows system files
+desktop.ini
+$RECYCLE.BIN

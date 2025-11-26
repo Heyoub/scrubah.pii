@@ -133,7 +133,24 @@ pnpm install
 pnpm start
 ```
 
-Open <http://localhost:3501/> (or check console for port)
+Open <http://localhost:3500/> (or check console for port)
+
+### Deployment Modes
+
+**Development (Local Bundling)**
+```bash
+pnpm start
+```
+- Uses local bundled assets via Vite
+- All processing runs entirely in your browser
+- Zero external API calls
+- Complete privacy guarantee
+
+**Production (Pre-built)**
+- Pre-built deployments may use ESM importmap with CDN for module delivery
+- All data processing still runs 100% locally in your browser
+- CDN only delivers static JavaScript modules, not data
+- Verify deployment source before using with sensitive documents
 
 ### Basic Usage
 
