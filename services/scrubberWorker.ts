@@ -98,8 +98,8 @@ class ScrubberWorkerManager {
     // If no worker, fall back to main thread (import piiScrubber dynamically)
     if (!this.worker) {
       console.log('⚠️ No Web Worker, using main thread');
-      const { piiScrubber } = await import('./piiScrubber');
-      const result = await piiScrubber.scrub(text, { regexOnly: true });
+      const { runScrubPII, DEFAULT_SCRUB_CONFIG } = await import('./piiScrubber.effect');
+      const result = await runScrubPII(text, DEFAULT_SCRUB_CONFIG);
       const originalSize = text.length;
       const scrubbedSize = result.text.length;
       const sizeChange = scrubbedSize - originalSize;

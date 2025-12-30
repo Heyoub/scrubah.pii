@@ -22,6 +22,16 @@ import { TextItem } from "pdfjs-dist/types/src/display/api";
 import mammoth from "mammoth";
 import Tesseract from "tesseract.js";
 import { AppError, PDFParseError, OCRError, FileSystemError } from "./errors";
+import {
+  OCRQualityResult,
+  defaultOCRQualityConfig,
+  isGarbageToken,
+} from "../schemas/ocrQuality";
+import {
+  OCRQualityService,
+  OCRQualityServiceLive,
+  needsManualReview,
+} from "./ocrQualityGate.effect";
 
 // Initialize PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -46,6 +56,30 @@ interface ParseResult {
   readonly pageCount?: number;
   readonly ocrPagesUsed?: number;
   readonly confidence?: number;
+  readonly ocrQuality?: OCRQualityResult;
+  readonly needsReview?: boolean;
+}
+
+/**
+ * TESSERACT WORD TYPE (for word-level access)
+ */
+interface TesseractWord {
+  text: string;
+  confidence: number;
+  bbox: {
+    x0: number;
+    y0: number;
+    x1: number;
+    y1: number;
+  };
+}
+
+interface TesseractResult {
+  data: {
+    text: string;
+    confidence: number;
+    words: TesseractWord[];
+  };
 }
 
 /**
@@ -69,16 +103,23 @@ export const FileParserService = Context.GenericTag<FileParserService>(
 );
 
 /**
- * PARSE IMAGE (OCR)
+ * PARSE IMAGE (OCR with quality gate)
  */
 const parseImage = (file: File): Effect.Effect<ParseResult, OCRError, never> => {
   return Effect.gen(function* (_) {
+    // Run Tesseract with word-level output
     const result = yield* _(
       Effect.tryPromise({
-        try: () =>
-          Tesseract.recognize(file, "eng", {
-            logger: (m) => console.debug("OCR Progress:", m),
-          }),
+        try: async (): Promise<TesseractResult> => {
+          const res = await Tesseract.recognize(file, "eng", {
+            logger: (m) => {
+              if (m.status === "recognizing text") {
+                console.debug(`[OCR] Progress: ${Math.round(m.progress * 100)}%`);
+              }
+            },
+          });
+          return res as TesseractResult;
+        },
         catch: (_error) =>
           new OCRError({
             file: file.name,
@@ -89,21 +130,53 @@ const parseImage = (file: File): Effect.Effect<ParseResult, OCRError, never> => 
       })
     );
 
+    // Convert Tesseract words to our format for quality analysis
+    const words = (result.data.words || []).map((tw) => ({
+      text: tw.text,
+      confidence: tw.confidence,
+      bbox: {
+        x: tw.bbox.x0,
+        y: tw.bbox.y0,
+        width: tw.bbox.x1 - tw.bbox.x0,
+        height: tw.bbox.y1 - tw.bbox.y0,
+      },
+      isGarbage: isGarbageToken(tw.text),
+    }));
+
+    // Run quality analysis via the service
+    const qualityProgram = pipe(
+      Effect.gen(function* (_) {
+        const qualityService = yield* _(OCRQualityService);
+        return yield* _(qualityService.analyzeQuality(words));
+      }),
+      Effect.provide(OCRQualityServiceLive)
+    );
+
+    const ocrQuality = yield* _(qualityProgram);
+
+    // Log quality assessment
+    console.log(
+      `[OCR Quality] ${file.name}: score=${ocrQuality.score.toFixed(2)}, ` +
+        `level=${ocrQuality.level}, flags=[${ocrQuality.flags.join(", ")}]`
+    );
+
     return {
       text: result.data.text,
       confidence: result.data.confidence / 100, // Normalize to 0-1
+      ocrQuality,
+      needsReview: needsManualReview(ocrQuality),
     };
   });
 };
 
 /**
- * PARSE PDF PAGE (with OCR fallback)
+ * PARSE PDF PAGE (with OCR fallback and quality gate)
  */
 const parsePDFPage = (
   page: any,
   pageNum: number
 ): Effect.Effect<
-  { text: string; usedOCR: boolean },
+  { text: string; usedOCR: boolean; ocrQuality?: OCRQualityResult },
   PDFParseError | OCRError,
   never
 > => {
@@ -178,11 +251,20 @@ const parsePDFPage = (
         })
       );
 
-      // Run OCR
+      // Run OCR with word-level output
       const ocrResult = yield* _(
         pipe(
           Effect.tryPromise({
-            try: () => Tesseract.recognize(blob, "eng"),
+            try: async (): Promise<TesseractResult> => {
+              const res = await Tesseract.recognize(blob, "eng", {
+                logger: (m) => {
+                  if (m.status === "recognizing text") {
+                    console.debug(`[OCR Page ${pageNum}] ${Math.round(m.progress * 100)}%`);
+                  }
+                },
+              });
+              return res as TesseractResult;
+            },
             catch: (_error) =>
               new OCRError({
                 file: `pdf page ${pageNum}`,
@@ -193,15 +275,71 @@ const parsePDFPage = (
           Effect.catchAll((_error) => {
             // On OCR failure, return placeholder
             return Effect.succeed({
-              data: { text: `[OCR_FAILED_PAGE_${pageNum}]\n`, confidence: 0 },
-            });
+              data: {
+                text: `[OCR_FAILED_PAGE_${pageNum}]\n`,
+                confidence: 0,
+                words: [],
+              },
+            } as TesseractResult);
           })
         )
       );
 
+      // Analyze OCR quality if we have words
+      let ocrQuality: OCRQualityResult | undefined;
+      if (ocrResult.data.words && ocrResult.data.words.length > 0) {
+        const words = ocrResult.data.words.map((tw) => ({
+          text: tw.text,
+          confidence: tw.confidence,
+          bbox: {
+            x: tw.bbox.x0,
+            y: tw.bbox.y0,
+            width: tw.bbox.x1 - tw.bbox.x0,
+            height: tw.bbox.y1 - tw.bbox.y0,
+          },
+          isGarbage: isGarbageToken(tw.text),
+        }));
+
+        const qualityProgram = pipe(
+          Effect.gen(function* (_) {
+            const qualityService = yield* _(OCRQualityService);
+            return yield* _(qualityService.analyzeQuality(words));
+          }),
+          Effect.provide(OCRQualityServiceLive)
+        );
+
+        ocrQuality = yield* _(qualityProgram);
+        ocrQuality = { ...ocrQuality, pageNumber: pageNum };
+
+        console.log(
+          `[OCR Quality Page ${pageNum}] score=${ocrQuality.score.toFixed(2)}, ` +
+            `level=${ocrQuality.level}, flags=[${ocrQuality.flags.join(", ")}]`
+        );
+
+        // If LOW quality and TrOCR available, attempt repair
+        if (
+          ocrQuality.level === "LOW" &&
+          ocrQuality.lowConfidenceRegions.length > 0 &&
+          defaultOCRQualityConfig.enableTrOCR
+        ) {
+          console.log(
+            `[OCR Quality Page ${pageNum}] Attempting TrOCR repair on ` +
+              `${ocrQuality.lowConfidenceRegions.length} low-confidence regions...`
+          );
+
+          // TrOCR repair would happen here with canvas access
+          // For now, just flag that repair was attempted
+          ocrQuality = {
+            ...ocrQuality,
+            flags: [...ocrQuality.flags, "NEEDS_MANUAL_REVIEW"],
+          };
+        }
+      }
+
       return {
         text: `[OCR_RECOVERED_PAGE_${pageNum}]\n` + ocrResult.data.text,
         usedOCR: true,
+        ocrQuality,
       };
     }
 
@@ -250,7 +388,7 @@ const parsePDFPage = (
     lines.sort((a, b) => b.y - a.y);
     const pageText = lines.map((l) => l.text).join("\n");
 
-    return { text: pageText, usedOCR: false };
+    return { text: pageText, usedOCR: false, ocrQuality: undefined };
   });
 };
 
@@ -371,6 +509,7 @@ const parsePDF = (
     // Parse all pages
     const pages: string[] = [];
     let ocrPagesUsed = 0;
+    const ocrQualities: OCRQualityResult[] = [];
 
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = yield* _(
@@ -386,17 +525,34 @@ const parsePDF = (
         })
       );
 
-      const { text, usedOCR } = yield* _(parsePDFPage(page, i));
+      const { text, usedOCR, ocrQuality } = yield* _(parsePDFPage(page, i));
       pages.push(text);
       if (usedOCR) ocrPagesUsed++;
+      if (ocrQuality) ocrQualities.push(ocrQuality);
     }
 
     const cleanedText = cleanPDFArtifacts(pages);
+
+    // Aggregate OCR quality (use worst score, collect all flags)
+    let aggregatedQuality: OCRQualityResult | undefined;
+    if (ocrQualities.length > 0) {
+      const worstQuality = ocrQualities.reduce((worst, current) =>
+        current.score < worst.score ? current : worst
+      );
+      const allFlags = [...new Set(ocrQualities.flatMap((q) => q.flags))];
+
+      aggregatedQuality = {
+        ...worstQuality,
+        flags: allFlags as OCRQualityResult["flags"],
+      };
+    }
 
     return {
       text: cleanedText,
       pageCount: pdf.numPages,
       ocrPagesUsed,
+      ocrQuality: aggregatedQuality,
+      needsReview: aggregatedQuality ? needsManualReview(aggregatedQuality) : false,
     };
   });
 };

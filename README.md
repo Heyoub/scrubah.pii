@@ -16,21 +16,30 @@ Sanitize medical documents locally in your browser. Generate LLM-optimized timel
 
 ## 🎯 What It Does
 
-Scrubah.PII transforms messy medical records into clean, LLM-ready datasets using a **dual-pipeline architecture**:
+Scrubah.PII transforms messy medical records into clean, LLM-ready datasets using a **triple-pipeline architecture**:
 
-### Blacklist Pipeline (PII Scrubbing)
+### Pipeline 1: Blacklist (PII Scrubbing)
 1. **Regex Detection**: Structural PII patterns (email, phone, SSN, MRN, dates)
 2. **ML Detection**: Named entities (names, locations, organizations) via BERT NER
 3. **Placeholder Generation**: Consistent redaction across all documents
 
-### Whitelist Pipeline (Clinical Extraction)
+### Pipeline 2: Whitelist (Clinical Extraction)
 1. **Structured Extraction**: Lab values, imaging findings, pathology results
 2. **Safe-by-Design**: Only extracts validated medical data, PII excluded by design
 3. **Timeline Format**: Clean markdown tables optimized for LLM consumption
 
+### Pipeline 3: Compression (77% Reduction) - *New!*
+Intelligent document compression for LLM context optimization:
+
+1. **OCR Quality Gate**: Filter low-quality scans (configurable threshold)
+2. **Template Detection**: Strip boilerplate headers/footers (81% compression on repetitive content)
+3. **Semantic Deduplication**: Remove similar documents using embedding similarity
+4. **Structured Extraction**: Extract labs, meds, diagnoses, vitals, imaging findings
+5. **Narrative Generation**: Generate concise clinical summaries (62% compression)
+
 ### Additional Features
 - **Document Parsing**: PDFs (digital + OCR), DOCX, images, text files
-- **Deduplication**: Content-based detection with 95% similarity threshold
+- **Smart Deduplication**: SHA-256 exact + semantic similarity for fuzzy matching
 - **100% Local**: All processing in-browser using WebAssembly ML models
 
 **Perfect for**: Healthcare researchers, clinical data analysts, AI medical applications, HIPAA-compliant workflows
@@ -62,12 +71,20 @@ Scrubah.PII transforms messy medical records into clean, LLM-ready datasets usin
 
 ### 📊 Intelligent Timeline Compilation
 
-- **Content-based deduplication**: SHA-256 + SimHash for fuzzy matching
+- **Smart deduplication**: SHA-256 exact + semantic embedding similarity
 - **Date extraction**: From filenames and document content (date-fns)
 - **Document classification**: Labs, imaging, progress notes, pathology, etc.
 - **Structured lab data**: 30+ common tests extracted into tables
 - **Trend analysis**: Automatic comparison of sequential lab values
 - **Cross-referencing**: Links between related documents
+
+### 🗜️ Compression Pipeline (229 tests)
+
+- **OCR Quality Gate**: Character pattern analysis, configurable thresholds
+- **Template Detection**: N-gram fingerprinting with FNV-1a hashing
+- **Semantic Dedup**: Cosine similarity on word embeddings, Union-Find clustering
+- **Structured Extraction**: Regex-based clinical data extraction with confidence scoring
+- **Narrative Generation**: Template-based summarization, configurable verbosity
 
 ### 🚀 Performance Optimized
 
@@ -81,24 +98,29 @@ Scrubah.PII transforms messy medical records into clean, LLM-ready datasets usin
 ## 🏗️ Architecture
 
 ```shell
-┌───────────────────────────────────────────────────────────────────┐
-│                      Browser (Client)                              │
-├───────────────────────────────────────────────────────────────────┤
-│  React UI  →  File Upload  →  Dual Processing Pipeline            │
-│     ↓              ↓                                               │
-│  Parser    →  ┌─────────────────────────────────────┐            │
-│  (PDF.js)     │  PIPELINE 1: Blacklist (Scrubbing)  │            │
-│     ↓         │  Regex + BERT NER → Placeholders    │            │
-│               └─────────────────────────────────────┘            │
-│     ↓                        ↓                                    │
-│               ┌─────────────────────────────────────┐            │
-│               │  PIPELINE 2: Whitelist (Extraction) │            │
-│               │  Structured Medical Data Only       │            │
-│               └─────────────────────────────────────┘            │
-│     ↓              ↓                    ↓                         │
-│  Dexie     →   IndexedDB    →    Timeline Generator              │
-│                                  (Content Hasher + Markdown)      │
-└───────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         Browser (Client)                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│  React UI  →  File Upload  →  Triple Processing Pipeline                │
+│     ↓              ↓                                                     │
+│  Parser    →  ┌─────────────────────────────────────┐                  │
+│  (PDF.js)     │  PIPELINE 1: Blacklist (Scrubbing)  │                  │
+│     ↓         │  Regex + BERT NER → Placeholders    │                  │
+│               └─────────────────────────────────────┘                  │
+│     ↓                        ↓                                          │
+│               ┌─────────────────────────────────────┐                  │
+│               │  PIPELINE 2: Whitelist (Extraction) │                  │
+│               │  Structured Medical Data Only       │                  │
+│               └─────────────────────────────────────┘                  │
+│     ↓                        ↓                                          │
+│               ┌─────────────────────────────────────────────────────┐  │
+│               │  PIPELINE 3: Compression (77% reduction)            │  │
+│               │  OCR Gate → Templates → Dedup → Extract → Narrate   │  │
+│               └─────────────────────────────────────────────────────┘  │
+│     ↓              ↓                    ↓                               │
+│  Dexie     →   IndexedDB    →    Timeline Generator                    │
+│                                  (Content Hasher + Markdown)            │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Stack:**
@@ -231,6 +253,12 @@ pnpm run build  # Runs tsc + vite build
 - File Parser: PDF (digital + OCR), DOCX, images
 - PII Scrubber: Regex patterns, ML inference, placeholder consistency
 - Markdown Formatter: YAML frontmatter, artifact removal
+- **Compression Pipeline** (229 tests):
+  - Template Detection: 49 tests (N-gram fingerprinting, 81% compression)
+  - Semantic Dedup: 64 tests (cosine similarity, Union-Find clustering)
+  - Structured Extraction: 51 tests (labs, meds, diagnoses, vitals)
+  - Narrative Generation: 38 tests (template-based summaries, 62% compression)
+  - Unified Pipeline: 27 tests (end-to-end orchestration, 77% compression)
 
 ---
 
@@ -324,6 +352,52 @@ interface Timeline {
   markdown: string;              // Clean clinical timeline
   extraction: ExtractionStats;   // Success/failure counts
 }
+```
+
+#### Pipeline 3: Compression
+
+##### `CompressionPipelineService.process(docs, config?): Effect<PipelineResult>`
+
+Runs documents through the full compression pipeline.
+
+**Stages:**
+1. OCR Quality Gate - Filter low-quality scans
+2. Template Detection - Strip boilerplate (81% compression)
+3. Semantic Dedup - Remove similar documents
+4. Structured Extraction - Extract clinical data
+5. Narrative Generation - Generate summaries (62% compression)
+
+**Returns:**
+
+```typescript
+interface PipelineResult {
+  documents: DocumentResult[];
+  compressionRatio: number;        // 0-1, typically 0.77 (77%)
+  totalInputChars: number;
+  totalOutputChars: number;
+  ocrFilteredCount: number;
+  duplicatesRemoved: number;
+  stages: StageResult[];
+}
+```
+
+##### Individual Stage Services
+
+```typescript
+// Template Detection - N-gram fingerprinting
+TemplateDetectionService.buildCorpus(docs): Effect<TemplateCorpus>
+TemplateDetectionService.stripTemplates(doc, corpus): Effect<StrippedDocument>
+
+// Semantic Deduplication - Embedding similarity
+SemanticDedupService.findDuplicates(docs, config): Effect<DeduplicationResult>
+
+// Structured Extraction - Clinical data
+StructuredExtractionService.extractAll(doc): Effect<ExtractionResult>
+StructuredExtractionService.extractLabs(text): Effect<LabPanel[]>
+StructuredExtractionService.extractMedications(text): Effect<Medication[]>
+
+// Narrative Generation - Summaries
+NarrativeGenerationService.generate(input, config): Effect<NarrativeResult>
 ```
 
 #### Legacy Services

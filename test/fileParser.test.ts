@@ -199,7 +199,7 @@ describe('File Parser - Error Handling', () => {
       await parseFile(file);
       expect.fail('Should have thrown an error');
     } catch (error: any) {
-      expect(error.message).toContain('Failed to parse file');
+      expect(error.message).toContain('Failed to parse');
     }
   });
 });

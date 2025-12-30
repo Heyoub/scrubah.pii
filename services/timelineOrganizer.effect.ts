@@ -16,21 +16,23 @@
 
 import { Effect } from "effect";
 import { parse, isValid } from "date-fns";
-import { ProcessedFile } from "../schemas/schemas";
-import { MissingDateError, TimelineConflictError, ErrorCollector } from "./errors";
 import {
+  ProcessedFile,
   DocumentFingerprint,
   DuplicateAnalysis,
   DocumentType,
+  LabPanel,
+} from "../schemas/schemas";
+import { MissingDateError, TimelineConflictError, ErrorCollector } from "./errors";
+import {
   analyzeDuplication,
   generateFingerprint,
-} from "./contentHasher";
+} from "./contentHasher.effect";
 import {
-  extractLabResults,
+  extractLabResultsSync,
   formatLabTable,
   generateTrendAnalysis,
-  LabPanel,
-} from "./labExtractor";
+} from "./labExtractor.effect";
 
 /**
  * TIMELINE DOCUMENT (Immutable)
@@ -254,11 +256,14 @@ const detectDuplicates = (
     for (let j = 0; j < i; j++) {
       const previousDoc = documents[j];
 
-      const duplicationInfo = analyzeDuplication(
-        currentDoc.fingerprint,
-        previousDoc.fingerprint,
-        currentDoc.date,
-        previousDoc.date
+      // Run the Effect synchronously to get DuplicateAnalysis
+      const duplicationInfo = Effect.runSync(
+        analyzeDuplication(
+          currentDoc.fingerprint,
+          previousDoc.fingerprint,
+          currentDoc.date,
+          previousDoc.date
+        )
       );
 
       // If duplicate found, mark it
@@ -511,9 +516,7 @@ export const buildMasterTimeline = (
       if (!file.scrubbedText) continue;
 
       const fingerprint = yield* _(
-        Effect.promise(() =>
-          generateFingerprint(file.originalName, file.scrubbedText!)
-        )
+        generateFingerprint(file.originalName, file.scrubbedText!)
       );
 
       // Extract lab data if applicable
@@ -524,7 +527,7 @@ export const buildMasterTimeline = (
       );
       const labData =
         fingerprint.documentType === DocumentType.LAB_REPORT
-          ? extractLabResults(file.scrubbedText, date.toLocaleDateString()) ?? undefined
+          ? extractLabResultsSync(file.scrubbedText, date.toLocaleDateString()) ?? undefined
           : undefined;
 
       const doc = createTimelineDocument(

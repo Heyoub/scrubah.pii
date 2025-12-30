@@ -16,25 +16,22 @@
  * end
  */
 
-import { Effect, pipe, Array as A, Option as O } from "effect";
+import { Effect } from "effect";
 import type {
   ExtractedMedicalRecord,
   LabResult,
-  LabPanel,
+  ExtendedLabPanel,
   Diagnosis,
   Medication,
-  Procedure,
   ImagingFinding,
   VitalSigns,
   PathologyResult,
-  ClinicalObservation,
-  DocumentType,
+  ExtendedDocumentType,
   LabStatus,
   Severity,
 } from "../../../schemas/schemas";
 import {
   PIILeakageError,
-  SectionExtractionError,
   LabParseError,
   ExtractionErrorCollector,
   type MedicalExtractionError,
@@ -60,7 +57,7 @@ const PII_PATTERNS = {
 /**
  * Validate extracted text doesn't contain PII
  */
-const validateNoPII = (
+const _validateNoPII = (
   text: string,
   fieldName: string
 ): Effect.Effect<string, PIILeakageError, never> => {
@@ -178,7 +175,7 @@ const LAB_TEST_PATTERNS: Record<string, RegExp> = {
 const REFERENCE_RANGES: Record<string, { low: number; high: number; unit: string }> = {
   WBC: { low: 4.0, high: 11.0, unit: "K/uL" },
   RBC: { low: 4.5, high: 5.5, unit: "M/uL" },
-  HGB: { low: 12.0, high: 17.5, unit: "g/dL" },
+  HGB: { low: 13.5, high: 17.5, unit: "g/dL" },
   HCT: { low: 36, high: 50, unit: "%" },
   PLT: { low: 150, high: 400, unit: "K/uL" },
   Glucose: { low: 70, high: 100, unit: "mg/dL" },
@@ -192,12 +189,12 @@ const REFERENCE_RANGES: Record<string, { low: number; high: number; unit: string
 
 const determineLabStatus = (testName: string, value: number): LabStatus => {
   const range = REFERENCE_RANGES[testName];
-  if (!range) return "unknown";
-  
-  if (value < range.low * 0.5 || value > range.high * 2) return "critical";
-  if (value < range.low) return "low";
-  if (value > range.high) return "high";
-  return "normal";
+  if (!range) return "Normal"; // Default to Normal when no range available
+
+  if (value < range.low * 0.5 || value > range.high * 2) return "Critical";
+  if (value < range.low) return "Low";
+  if (value > range.high) return "High";
+  return "Normal";
 };
 
 const extractLabResults = (
@@ -205,20 +202,21 @@ const extractLabResults = (
   errorCollector: ExtractionErrorCollector
 ): LabResult[] => {
   const results: LabResult[] = [];
-  
+
   for (const [testName, pattern] of Object.entries(LAB_TEST_PATTERNS)) {
     const match = text.match(pattern);
     if (match) {
       const valueStr = match[1];
       const unit = match[2] || REFERENCE_RANGES[testName]?.unit || "";
       const value = parseFloat(valueStr);
-      
+
       if (!isNaN(value)) {
         const range = REFERENCE_RANGES[testName];
         results.push({
           testName,
           value: valueStr,
-          unit: unit || undefined,
+          unit: unit ?? "",
+          date: new Date().toISOString().split("T")[0], // Default to today if no date extracted
           referenceRange: range ? `${range.low}-${range.high}` : undefined,
           status: determineLabStatus(testName, value),
         });
@@ -231,7 +229,7 @@ const extractLabResults = (
       }
     }
   }
-  
+
   return results;
 };
 
@@ -277,7 +275,7 @@ const KNOWN_MEDICATIONS = new Set([
 
 const extractMedications = (
   text: string,
-  errorCollector: ExtractionErrorCollector
+  _errorCollector: ExtractionErrorCollector
 ): Medication[] => {
   const medications: Medication[] = [];
   const seen = new Set<string>();
@@ -348,7 +346,7 @@ const SEVERITY_KEYWORDS: Record<string, Severity> = {
 
 const extractDiagnoses = (
   text: string,
-  errorCollector: ExtractionErrorCollector
+  _errorCollector: ExtractionErrorCollector
 ): Diagnosis[] => {
   const diagnoses: Diagnosis[] = [];
   const seen = new Set<string>();
@@ -412,6 +410,10 @@ const IMAGING_MODALITY_PATTERNS: Record<ImagingFinding["modality"], RegExp> = {
 const BODY_PART_PATTERNS = [
   /(?:of the|of)\s+(chest|abdomen|pelvis|brain|head|spine|lumbar|thoracic|cervical|neck|extremit(?:y|ies)|knee|hip|shoulder|ankle|wrist|hand|foot)/i,
   /(chest|abdomen|pelvis|brain|head|spine|lumbar|thoracic|cervical)\s+(?:CT|MRI|X-?ray|scan)/i,
+  // Handle "MRI Lumbar Spine" pattern (modality first)
+  /(?:CT|MRI|X-?ray|scan)\s+(lumbar|thoracic|cervical)\s*(?:spine)?/i,
+  // Handle "lumbar spine" as standalone
+  /(lumbar|thoracic|cervical)\s+spine/i,
 ];
 
 const FINDING_PATTERNS = [
@@ -425,7 +427,7 @@ const FINDING_PATTERNS = [
 
 const extractImagingFindings = (
   text: string,
-  errorCollector: ExtractionErrorCollector
+  _errorCollector: ExtractionErrorCollector
 ): ImagingFinding[] => {
   const findings: ImagingFinding[] = [];
   
@@ -495,68 +497,54 @@ const VITAL_PATTERNS = {
 
 const extractVitalSigns = (
   text: string,
-  errorCollector: ExtractionErrorCollector
+  _errorCollector: ExtractionErrorCollector
 ): VitalSigns[] => {
-  // Use plain object to build vitals (avoid readonly constraints)
-  const vitals: any = {};
-  let hasAnyVital = false;
-
-  // Blood Pressure
+  // Extract all values first (undefined if not found)
   const bpMatch = text.match(VITAL_PATTERNS.bloodPressure);
-  if (bpMatch) {
-    vitals.bloodPressureSystolic = parseInt(bpMatch[1]);
-    vitals.bloodPressureDiastolic = parseInt(bpMatch[2]);
-    hasAnyVital = true;
-  }
-
-  // Heart Rate
   const hrMatch = text.match(VITAL_PATTERNS.heartRate);
-  if (hrMatch) {
-    vitals.heartRate = parseInt(hrMatch[1]);
-    hasAnyVital = true;
+  const rrMatch = text.match(VITAL_PATTERNS.respiratoryRate);
+  const tempMatch = text.match(VITAL_PATTERNS.temperature);
+  const o2Match = text.match(VITAL_PATTERNS.oxygenSaturation);
+  const weightMatch = text.match(VITAL_PATTERNS.weight);
+  const painMatch = text.match(VITAL_PATTERNS.painScale);
+
+  // Check if we found any vitals
+  const hasAnyVital = !!(bpMatch || hrMatch || rrMatch || tempMatch || o2Match || weightMatch || painMatch);
+
+  if (!hasAnyVital) {
+    return [];
   }
 
-  // Respiratory Rate
-  const rrMatch = text.match(VITAL_PATTERNS.respiratoryRate);
-  if (rrMatch) {
-    vitals.respiratoryRate = parseInt(rrMatch[1]);
-    hasAnyVital = true;
-  }
-  
-  // Temperature
-  const tempMatch = text.match(VITAL_PATTERNS.temperature);
-  if (tempMatch) {
-    vitals.temperature = parseFloat(tempMatch[1]);
-    vitals.temperatureUnit = tempMatch[2]?.includes("C") ? "C" : "F";
-    hasAnyVital = true;
-  }
-  
-  // Oxygen Saturation
-  const o2Match = text.match(VITAL_PATTERNS.oxygenSaturation);
-  if (o2Match) {
-    vitals.oxygenSaturation = parseInt(o2Match[1]);
-    hasAnyVital = true;
-  }
-  
-  // Weight
-  const weightMatch = text.match(VITAL_PATTERNS.weight);
-  if (weightMatch) {
-    vitals.weight = parseFloat(weightMatch[1]);
-    vitals.weightUnit = weightMatch[2]?.toLowerCase().startsWith("k") ? "kg" : "lb";
-    hasAnyVital = true;
-  }
-  
-  // Pain Scale
-  const painMatch = text.match(VITAL_PATTERNS.painScale);
+  // Parse pain with validation
+  let painScale: number | undefined;
   if (painMatch) {
     const pain = parseInt(painMatch[1]);
     if (pain >= 0 && pain <= 10) {
-      vitals.painScale = pain;
-      hasAnyVital = true;
+      painScale = pain;
     }
   }
-  
-  return hasAnyVital ? [vitals as VitalSigns] : [];
+
+  // Build the vitals object immutably (all fields optional per schema)
+  const vitals: VitalSigns = {
+    ...(bpMatch ? {
+      bloodPressureSystolic: parseInt(bpMatch[1]),
+      bloodPressureDiastolic: parseInt(bpMatch[2]),
+    } : {}),
+    ...(hrMatch ? { heartRate: parseInt(hrMatch[1]) } : {}),
+    ...(rrMatch ? { respiratoryRate: parseInt(rrMatch[1]) } : {}),
+    ...(tempMatch ? {
+      temperature: parseFloat(tempMatch[1]),
+      temperatureUnit: tempMatch[2]?.includes("C") ? "C" as const : "F" as const,
+    } : {}),
+    ...(o2Match ? { oxygenSaturation: parseInt(o2Match[1]) } : {}),
+    ...(weightMatch ? {
+      weight: parseFloat(weightMatch[1]),
+      weightUnit: weightMatch[2]?.toLowerCase().startsWith("k") ? "kg" as const : "lb" as const,
+    } : {}),
+    ...(painScale !== undefined ? { painScale } : {}),
+  };
+
+  return [vitals];
 };
 
 // ============================================================================
@@ -573,90 +561,86 @@ const PATHOLOGY_PATTERNS = {
 
 const extractPathologyResults = (
   text: string,
-  errorCollector: ExtractionErrorCollector
+  _errorCollector: ExtractionErrorCollector
 ): PathologyResult[] => {
-  const results: PathologyResult[] = [];
-  
   const specimenMatch = text.match(PATHOLOGY_PATTERNS.specimenType);
   const diagnosisMatch = text.match(PATHOLOGY_PATTERNS.diagnosis);
-  
-  if (diagnosisMatch) {
-    // Build result with plain object (avoid readonly constraints)
-    const result: any = {
-      specimenType: specimenMatch ? sanitizeText(specimenMatch[1].trim()) : "unspecified",
-      diagnosis: sanitizeText(diagnosisMatch[1].trim()),
-    };
 
-    const gradeMatch = text.match(PATHOLOGY_PATTERNS.grade);
-    if (gradeMatch) {
-      result.grade = gradeMatch[1].trim();
-    }
-
-    const stageMatch = text.match(PATHOLOGY_PATTERNS.stage);
-    if (stageMatch) {
-      result.stage = stageMatch[1].trim();
-    }
-
-    const marginsMatch = text.match(PATHOLOGY_PATTERNS.margins);
-    if (marginsMatch) {
-      const marginText = marginsMatch[1].toLowerCase();
-      if (marginText.includes("negative") || marginText.includes("clear") || marginText.includes("free")) {
-        result.margins = "negative";
-      } else if (marginText.includes("positive") || marginText.includes("involved")) {
-        result.margins = "positive";
-      } else if (marginText.includes("close")) {
-        result.margins = "close";
-      }
-    }
-
-    results.push(result as PathologyResult);
+  if (!diagnosisMatch) {
+    return [];
   }
-  
-  return results;
+
+  // Extract optional fields
+  const gradeMatch = text.match(PATHOLOGY_PATTERNS.grade);
+  const stageMatch = text.match(PATHOLOGY_PATTERNS.stage);
+  const marginsMatch = text.match(PATHOLOGY_PATTERNS.margins);
+
+  // Determine margins value
+  let margins: "negative" | "positive" | "close" | undefined;
+  if (marginsMatch) {
+    const marginText = marginsMatch[1].toLowerCase();
+    if (marginText.includes("negative") || marginText.includes("clear") || marginText.includes("free")) {
+      margins = "negative";
+    } else if (marginText.includes("positive") || marginText.includes("involved")) {
+      margins = "positive";
+    } else if (marginText.includes("close")) {
+      margins = "close";
+    }
+  }
+
+  // Build result immutably
+  const result: PathologyResult = {
+    specimenType: specimenMatch ? sanitizeText(specimenMatch[1].trim()) : "unspecified",
+    diagnosis: sanitizeText(diagnosisMatch[1].trim()),
+    ...(gradeMatch ? { grade: gradeMatch[1].trim() } : {}),
+    ...(stageMatch ? { stage: stageMatch[1].trim() } : {}),
+    ...(margins ? { margins } : {}),
+  };
+
+  return [result];
 };
 
 // ============================================================================
 // DOCUMENT TYPE CLASSIFICATION
 // ============================================================================
 
-const classifyDocument = (text: string): DocumentType => {
-  const lowerText = text.toLowerCase();
-  
-  if (/(?:lab|laboratory|result|panel|cbc|bmp|cmp|lipid)/i.test(text) && 
-      Object.keys(LAB_TEST_PATTERNS).some(test => 
+const classifyDocument = (text: string): ExtendedDocumentType => {
+
+  if (/(?:lab|laboratory|result|panel|cbc|bmp|cmp|lipid)/i.test(text) &&
+      Object.keys(LAB_TEST_PATTERNS).some(test =>
         new RegExp(test, "i").test(text)
       )) {
     return "lab_report";
   }
-  
+
   if (/(?:ct scan|mri|x-?ray|ultrasound|imaging|radiology|impression)/i.test(text)) {
     return "imaging";
   }
-  
+
   if (/(?:pathology|biopsy|specimen|histologic|adenocarcinoma|carcinoma)/i.test(text)) {
     return "pathology";
   }
-  
+
   if (/(?:discharge|discharged|follow.?up|instructions)/i.test(text)) {
     return "discharge_summary";
   }
-  
+
   if (/(?:progress note|soap|assessment|plan|subjective|objective)/i.test(text)) {
     return "progress_note";
   }
-  
+
   if (/(?:medication|prescription|refill|pharmacy)/i.test(text)) {
     return "medication_list";
   }
-  
+
   if (/(?:procedure|operative|surgery|performed)/i.test(text)) {
     return "procedure_note";
   }
-  
+
   if (/(?:consult|consultation|referred|opinion)/i.test(text)) {
     return "consultation";
   }
-  
+
   return "unknown";
 };
 
@@ -677,15 +661,28 @@ const extractDocumentDate = (text: string, filename: string): string | undefined
   if (filenameMatch) {
     return filenameMatch[0];
   }
-  
-  // Try document content
+
+  // Try document content - but avoid extracting DOB and other PII dates
+  // Look for dates that follow non-PII date labels
   for (const pattern of DATE_PATTERNS) {
-    const match = text.match(pattern);
-    if (match) {
+    const regex = new RegExp(pattern.source, 'gi');
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      // Check if this date is preceded by PII-related keywords
+      const contextStart = Math.max(0, match.index - 100);
+      const context = text.substring(contextStart, match.index);
+
+      // Skip if preceded by DOB, Date of Birth, or similar PII date labels
+      // These are birth-related dates that should never be extracted as document dates
+      if (/(?:DOB|Date\s+of\s+Birth|Birth\s+Date|Birthdate)\b/i.test(context)) {
+        continue;
+      }
+
+      // Return first date that's not a PII date label
       return match[0];
     }
   }
-  
+
   return undefined;
 };
 
@@ -729,7 +726,7 @@ export const extractMedicalData = (
     }
     
     // Create lab panels from results
-    const labPanels: LabPanel[] = labResults.length > 0 ? [{
+    const labPanels: ExtendedLabPanel[] = labResults.length > 0 ? [{
       collectionDate: documentDate || "unknown",
       results: labResults,
     }] : [];

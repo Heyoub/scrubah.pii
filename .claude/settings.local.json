@@ -13,7 +13,16 @@
       "Bash(git fsck:*)",
       "Bash(xargs:*)",
       "Bash(pnpm exec grep:*)",
-      "Bash(pnpm exec tsc:*)"
+      "Bash(pnpm exec tsc:*)",
+      "Bash(npx vitest:*)",
+      "Bash(npm install:*)",
+      "Bash(git checkout:*)",
+      "Bash(npm test:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npm run lint:fix:*)",
+      "Bash(pnpm lint:*)",
+      "Bash(timeout 20 pnpm test:*)",
+      "Bash(timeout 60 pnpm test:*)"
     ],
     "deny": [],
     "ask": []

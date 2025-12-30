@@ -16,7 +16,6 @@ import { describe, it, expect } from 'vitest';
 import { Schema as S, Effect, ParseResult } from 'effect';
 import {
   // Enums
-  ProcessingStage,
   ProcessingStageSchema,
 
   // Core types
@@ -28,31 +27,23 @@ import {
   DocumentType,
   DocumentTypeSchema,
   DocumentFingerprintSchema,
-  DifferenceType,
-  DifferenceTypeSchema,
   DuplicateAnalysisSchema,
 
   // Lab results
-  LabStatus,
   LabStatusSchema,
   LabResultSchema,
   LabPanelSchema,
 
   // Timeline
-  TimelineDocumentSchema,
   TimelineSummarySchema,
-  MasterTimelineSchema,
 
   // Audit
   AuditEntrySchema,
   AuditSummarySchema,
-  AuditReportSchema,
 
   // Decoders
   decodeProcessedFile,
   decodeLabPanel,
-  decodeMasterTimeline,
-  decodeAuditReport,
 } from '../schemas/schemas';
 
 // ============================================================================

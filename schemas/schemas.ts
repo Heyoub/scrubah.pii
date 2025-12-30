@@ -942,3 +942,416 @@ export const DocumentFormat = {
   DISCHARGE_SUMMARY: "discharge_summary" as const,
   UNKNOWN: "unknown" as const,
 };
+
+// ============================================================================
+// PII SCRUBBING TYPES (SINGLE SOURCE OF TRUTH)
+// ============================================================================
+
+/**
+ * PII ENTITY TYPE (What kind of PII was detected)
+ *
+ * OCaml equivalent:
+ * type pii_entity_type =
+ *   | Person    (* Names detected by ML *)
+ *   | Location  (* Addresses, cities *)
+ *   | Organization (* Hospital names, etc *)
+ *   | Email
+ *   | Phone
+ *   | SSN
+ *   | MRN
+ *   | Date
+ *   | Address
+ *   | CityState
+ *   | ZipCode
+ *   | CreditCard
+ *   | POBox
+ */
+export const PIIEntityTypeSchema = S.Literal(
+  "PER",      // Person (ML)
+  "LOC",      // Location (ML)
+  "ORG",      // Organization (ML)
+  "EMAIL",    // Email address (regex)
+  "PHONE",    // Phone number (regex)
+  "SSN",      // Social Security Number (regex)
+  "MRN",      // Medical Record Number (context regex)
+  "DATE",     // Date (regex)
+  "ADDRESS",  // Street address (regex)
+  "CITY_STATE", // City, State pattern (regex)
+  "ZIP",      // ZIP code (regex)
+  "CARD",     // Credit card (regex)
+  "PO_BOX",   // P.O. Box (regex)
+  "NAME"      // Labeled name (context regex)
+);
+export type PIIEntityType = S.Schema.Type<typeof PIIEntityTypeSchema>;
+
+/**
+ * NER ENTITY (Machine learning model output)
+ *
+ * OCaml equivalent:
+ * type ner_entity = {
+ *   entity_group: string;
+ *   word: string;
+ *   start: int;
+ *   end: int;
+ *   score: float;
+ * }
+ */
+export const NEREntitySchema = S.Struct({
+  entity_group: S.String,
+  word: S.String,
+  start: pipe(S.Int, S.greaterThanOrEqualTo(0)),
+  end: pipe(S.Int, S.greaterThanOrEqualTo(0)),
+  score: pipe(S.Number, S.greaterThanOrEqualTo(0), S.lessThanOrEqualTo(1)),
+});
+export type NEREntity = S.Schema.Type<typeof NEREntitySchema>;
+
+/**
+ * PII DETECTION RESULT (Single detected PII instance)
+ *
+ * OCaml equivalent:
+ * type pii_detection = {
+ *   entity_type: pii_entity_type;
+ *   original_value: string;
+ *   start: int;
+ *   end: int;
+ *   confidence: float;
+ *   detection_method: string;
+ * }
+ */
+export const PIIDetectionSchema = S.Struct({
+  entityType: PIIEntityTypeSchema,
+  originalValue: S.String,
+  start: pipe(S.Int, S.greaterThanOrEqualTo(0)),
+  end: pipe(S.Int, S.greaterThanOrEqualTo(0)),
+  confidence: pipe(S.Number, S.greaterThanOrEqualTo(0), S.lessThanOrEqualTo(1)),
+  detectionMethod: S.Literal("regex", "ml", "context"),
+});
+export type PIIDetection = S.Schema.Type<typeof PIIDetectionSchema>;
+
+/**
+ * PII PATTERN DEFINITION (Regex pattern for PII detection)
+ *
+ * OCaml equivalent:
+ * type pii_pattern = {
+ *   name: string;
+ *   pattern: regexp;
+ *   entity_type: pii_entity_type;
+ *   placeholder_prefix: string;
+ * }
+ */
+export interface PIIPatternDefinition {
+  readonly name: string;
+  readonly pattern: RegExp;
+  readonly entityType: PIIEntityType;
+  readonly placeholderPrefix: string;
+}
+
+/**
+ * NAME LABEL (Context labels for name detection)
+ */
+export const NAME_LABELS = [
+  "Patient Name",
+  "Name",
+  "Full Name",
+  "Legal Name",
+  "Patient",
+  "Attending",
+  "Physician",
+  "Doctor",
+  "Nurse",
+  "Provider",
+  "patientName",
+  "patient_name",
+  "fullName",
+  "full_name",
+  "legalName",
+  "legal_name",
+] as const;
+export type NameLabel = typeof NAME_LABELS[number];
+
+/**
+ * SCRUB CONFIG (Configuration for PII scrubbing)
+ *
+ * OCaml equivalent:
+ * type scrub_config = {
+ *   ml_confidence_threshold: float;
+ *   enable_ml: bool;
+ *   enable_regex: bool;
+ *   enable_context_detection: bool;
+ * }
+ */
+export const ScrubConfigSchema = S.Struct({
+  mlConfidenceThreshold: pipe(S.Number, S.greaterThanOrEqualTo(0), S.lessThanOrEqualTo(1)),
+  enableML: S.Boolean,
+  enableRegex: S.Boolean,
+  enableContextDetection: S.Boolean,
+});
+export type ScrubConfig = S.Schema.Type<typeof ScrubConfigSchema>;
+
+/**
+ * Default scrub configuration
+ */
+export const DEFAULT_SCRUB_CONFIG: ScrubConfig = {
+  mlConfidenceThreshold: 0.65, // Lowered from 0.85 to catch more PII
+  enableML: true,
+  enableRegex: true,
+  enableContextDetection: true,
+};
+
+/**
+ * SCRUB STATE (Immutable state during scrubbing)
+ *
+ * OCaml equivalent:
+ * type scrub_state = {
+ *   text: string;
+ *   replacements: pii_map;
+ *   counters: entity_counters;
+ * }
+ */
+export const ScrubStateSchema = S.Struct({
+  text: S.String,
+  replacements: PIIMapSchema,
+  counters: S.Record({ key: S.String, value: S.Int }),
+});
+export type ScrubState = S.Schema.Type<typeof ScrubStateSchema>;
+
+// Mutable version for internal processing
+export interface MutableScrubState {
+  text: string;
+  replacements: MutablePIIMap;
+  counters: Record<string, number>;
+}
+
+/**
+ * LABELED DETECTION (Name detected via context label)
+ */
+export interface LabeledDetection {
+  readonly start: number;
+  readonly end: number;
+  readonly value: string;
+  readonly label: string;
+}
+
+// ============================================================================
+// PII PATTERN CONSTANTS (SSOT for all regex patterns)
+// ============================================================================
+
+/**
+ * All PII regex patterns in one place
+ * These are exported for use in tests and the scrubber
+ */
+export const PII_PATTERNS = {
+  EMAIL: /\b[\w\.-]+@[\w\.-]+\.\w{2,}\b/g,
+  PHONE: /(?:\+?1[-. ]?)?\(?([0-9]{3})\)?[-. ]?([0-9]{3})[-. ]?([0-9]{4})/g,
+  SSN: /\b\d{3}-\d{2}-\d{4}\b/g,
+  DATE: /\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b/g,
+  CREDIT_CARD: /\b(?:\d{4}[-\s]?){3}\d{4}\b/g,
+  ZIPCODE: /\b\d{5}(?:-\d{4})?\b/g,
+  // NEW: Address patterns
+  ADDRESS: /\b\d+\s+[\w\s]+\s+(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|Way|Court|Ct|Circle|Cir|Parkway|Pkwy|Place|Pl)\.?(?:\s+(?:Apt|Suite|Unit|#)\.?\s*[\w\d]+)?\b/gi,
+  CITY_STATE: /\b[A-Z][a-zA-Z\s]+,\s*[A-Z]{2}\b/g,
+  PO_BOX: /\bP\.?\s*O\.?\s*Box\s+\d+\b/gi,
+} as const;
+
+/**
+ * MRN context keywords for context-aware detection
+ */
+export const MRN_CONTEXT_KEYWORDS = [
+  "MRN",
+  "Medical Record Number",
+  "Patient ID",
+  "Patient Number",
+  "Record Number",
+  "Chart Number",
+  "Account Number",
+  "Member ID",
+] as const;
+export type MRNContextKeyword = typeof MRN_CONTEXT_KEYWORDS[number];
+
+// ============================================================================
+// MEDICAL EXTRACTION TYPES (for whitelist extraction)
+// ============================================================================
+
+/**
+ * LAB STATUS (extended from existing)
+ */
+export const ExtendedLabStatusSchema = S.Literal("normal", "high", "low", "critical", "unknown");
+export type ExtendedLabStatus = S.Schema.Type<typeof ExtendedLabStatusSchema>;
+
+/**
+ * SEVERITY (for diagnoses)
+ */
+export const SeveritySchema = S.Literal("mild", "moderate", "severe", "critical", "unspecified");
+export type Severity = S.Schema.Type<typeof SeveritySchema>;
+
+/**
+ * MEDICATION ROUTE
+ */
+export const MedicationRouteSchema = S.Literal(
+  "oral", "iv", "im", "subq", "topical", "inhaled", "rectal", "other"
+);
+export type MedicationRoute = S.Schema.Type<typeof MedicationRouteSchema>;
+
+/**
+ * MEDICATION STATUS
+ */
+export const MedicationStatusSchema = S.Literal("active", "discontinued", "hold", "prn");
+export type MedicationStatus = S.Schema.Type<typeof MedicationStatusSchema>;
+
+/**
+ * MEDICATION (Extracted medication info)
+ */
+export const MedicationSchema = S.Struct({
+  name: pipe(S.String, S.minLength(1)),
+  dose: S.optional(S.String),
+  unit: S.optional(S.String),
+  route: S.optional(MedicationRouteSchema),
+  frequency: S.optional(S.String),
+  status: S.optional(MedicationStatusSchema),
+});
+export type Medication = S.Schema.Type<typeof MedicationSchema>;
+
+/**
+ * DIAGNOSIS (Extracted diagnosis info)
+ */
+export const DiagnosisSchema = S.Struct({
+  condition: pipe(S.String, S.minLength(1)),
+  icdCode: S.optional(S.String),
+  severity: S.optional(SeveritySchema),
+  status: S.optional(S.Literal("active", "resolved", "chronic")),
+});
+export type Diagnosis = S.Schema.Type<typeof DiagnosisSchema>;
+
+/**
+ * PROCEDURE (Extracted procedure info)
+ */
+export const ProcedureSchema = S.Struct({
+  name: pipe(S.String, S.minLength(1)),
+  date: S.optional(S.String),
+  cptCode: S.optional(S.String),
+  outcome: S.optional(S.String),
+});
+export type Procedure = S.Schema.Type<typeof ProcedureSchema>;
+
+/**
+ * IMAGING MODALITY
+ */
+export const ImagingModalitySchema = S.Literal(
+  "ct", "mri", "xray", "ultrasound", "pet", "nuclear", "fluoroscopy", "other"
+);
+export type ImagingModality = S.Schema.Type<typeof ImagingModalitySchema>;
+
+/**
+ * IMAGING FINDING (Extracted imaging result)
+ */
+export const ImagingFindingSchema = S.Struct({
+  modality: ImagingModalitySchema,
+  bodyPart: S.String,
+  findings: S.Array(S.String),
+  impression: S.optional(S.String),
+});
+export type ImagingFinding = S.Schema.Type<typeof ImagingFindingSchema>;
+
+/**
+ * VITAL SIGNS (Extracted vitals)
+ */
+export const VitalSignsSchema = S.Struct({
+  bloodPressureSystolic: S.optional(S.Int),
+  bloodPressureDiastolic: S.optional(S.Int),
+  heartRate: S.optional(S.Int),
+  respiratoryRate: S.optional(S.Int),
+  temperature: S.optional(S.Number),
+  temperatureUnit: S.optional(S.Literal("F", "C")),
+  oxygenSaturation: S.optional(S.Int),
+  weight: S.optional(S.Number),
+  weightUnit: S.optional(S.Literal("kg", "lb")),
+  painScale: S.optional(pipe(S.Int, S.greaterThanOrEqualTo(0), S.lessThanOrEqualTo(10))),
+});
+export type VitalSigns = S.Schema.Type<typeof VitalSignsSchema>;
+
+/**
+ * PATHOLOGY MARGINS
+ */
+export const PathologyMarginsSchema = S.Literal("negative", "positive", "close");
+export type PathologyMargins = S.Schema.Type<typeof PathologyMarginsSchema>;
+
+/**
+ * PATHOLOGY RESULT (Extracted pathology info)
+ */
+export const PathologyResultSchema = S.Struct({
+  specimenType: S.String,
+  diagnosis: S.String,
+  grade: S.optional(S.String),
+  stage: S.optional(S.String),
+  margins: S.optional(PathologyMarginsSchema),
+});
+export type PathologyResult = S.Schema.Type<typeof PathologyResultSchema>;
+
+/**
+ * CLINICAL OBSERVATION (Generic observation)
+ */
+export const ClinicalObservationSchema = S.Struct({
+  category: S.String,
+  observation: S.String,
+  date: S.optional(S.String),
+});
+export type ClinicalObservation = S.Schema.Type<typeof ClinicalObservationSchema>;
+
+/**
+ * EXTENDED DOCUMENT TYPE (for medical extraction)
+ */
+export const ExtendedDocumentTypeSchema = S.Literal(
+  "lab_report",
+  "imaging",
+  "progress_note",
+  "pathology",
+  "medication_list",
+  "discharge_summary",
+  "procedure_note",
+  "consultation",
+  "correspondence",
+  "unknown"
+);
+export type ExtendedDocumentType = S.Schema.Type<typeof ExtendedDocumentTypeSchema>;
+
+/**
+ * LAB PANEL (Extended for extraction)
+ */
+export const ExtendedLabPanelSchema = S.Struct({
+  collectionDate: S.String,
+  results: S.Array(LabResultSchema),
+});
+export type ExtendedLabPanel = S.Schema.Type<typeof ExtendedLabPanelSchema>;
+
+/**
+ * EXTRACTED MEDICAL RECORD (Whitelist extraction result)
+ *
+ * Contains ONLY clinical data - no PII by design
+ */
+export const ExtractedMedicalRecordSchema = S.Struct({
+  sourceDocumentHash: S.String,
+  documentType: ExtendedDocumentTypeSchema,
+  documentDate: S.optional(S.String),
+  extractionConfidence: pipe(S.Int, S.greaterThanOrEqualTo(0), S.lessThanOrEqualTo(100)),
+  diagnoses: S.Array(DiagnosisSchema),
+  labPanels: S.Array(ExtendedLabPanelSchema),
+  medications: S.Array(MedicationSchema),
+  procedures: S.Array(ProcedureSchema),
+  imagingFindings: S.Array(ImagingFindingSchema),
+  vitalSigns: S.Array(VitalSignsSchema),
+  pathology: S.Array(PathologyResultSchema),
+  clinicalObservations: S.Array(ClinicalObservationSchema),
+  warnings: S.Array(S.String),
+  sectionsSkipped: S.Array(S.String),
+});
+export type ExtractedMedicalRecord = S.Schema.Type<typeof ExtractedMedicalRecordSchema>;
+
+// ============================================================================
+// DECODERS FOR NEW SCHEMAS
+// ============================================================================
+
+export const decodeNEREntity = S.decodeUnknown(NEREntitySchema);
+export const decodePIIDetection = S.decodeUnknown(PIIDetectionSchema);
+export const decodeScrubConfig = S.decodeUnknown(ScrubConfigSchema);
+export const decodeScrubState = S.decodeUnknown(ScrubStateSchema);
+export const decodeExtractedMedicalRecord = S.decodeUnknown(ExtractedMedicalRecordSchema);

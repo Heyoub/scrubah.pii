@@ -7,13 +7,10 @@
  * via the whitelist extraction approach.
  */
 
-import { Effect, pipe, Array as A } from "effect";
+import { Effect } from "effect";
 import type {
   ExtractedMedicalRecord,
-  MedicalTimeline,
-  MedicalTimelineEntry,
-  LabResult,
-  LabPanel,
+  ExtendedLabPanel,
   Diagnosis,
   Medication,
   ImagingFinding,
@@ -27,12 +24,10 @@ import type {
 // ============================================================================
 
 const LAB_STATUS_EMOJI: Record<LabStatus, string> = {
-  normal: "✅",
-  low: "⬇️",
-  high: "⬆️",
-  critical: "🚨",
-  abnormal: "⚠️",
-  unknown: "❓",
+  Normal: "✅",
+  Low: "⬇️",
+  High: "⬆️",
+  Critical: "🚨",
 };
 
 const DOC_TYPE_EMOJI: Record<string, string> = {
@@ -51,7 +46,7 @@ const DOC_TYPE_EMOJI: Record<string, string> = {
 // LAB RESULT FORMATTING
 // ============================================================================
 
-const formatLabTable = (panel: LabPanel): string => {
+const formatLabTable = (panel: ExtendedLabPanel): string => {
   if (panel.results.length === 0) return "";
   
   const lines: string[] = [
@@ -76,8 +71,8 @@ const formatLabTable = (panel: LabPanel): string => {
 };
 
 const formatLabTrends = (
-  currentPanel: LabPanel,
-  previousPanel: LabPanel | undefined
+  currentPanel: ExtendedLabPanel,
+  previousPanel: ExtendedLabPanel | undefined
 ): string => {
   if (!previousPanel) return "";
   
@@ -249,7 +244,7 @@ const formatPathology = (results: readonly PathologyResult[]): string => {
 const formatDocument = (
   record: ExtractedMedicalRecord,
   index: number,
-  previousLabPanel: LabPanel | undefined
+  previousExtendedLabPanel: ExtendedLabPanel | undefined
 ): string => {
   const emoji = DOC_TYPE_EMOJI[record.documentType] || "📄";
   const date = record.documentDate || "Unknown Date";
@@ -271,7 +266,7 @@ const formatDocument = (
   // Add lab results if present
   for (const panel of record.labPanels) {
     sections.push(formatLabTable(panel));
-    sections.push(formatLabTrends(panel, previousLabPanel));
+    sections.push(formatLabTrends(panel, previousExtendedLabPanel));
     sections.push("");
   }
   
@@ -310,7 +305,7 @@ interface TimelineSummary {
   totalDocuments: number;
   byType: Record<string, number>;
   totalDiagnoses: number;
-  totalLabPanels: number;
+  totalExtendedLabPanels: number;
   totalMedications: number;
   activeMedications: Medication[];
   activeDiagnoses: Diagnosis[];
@@ -324,7 +319,7 @@ const calculateSummary = (records: ExtractedMedicalRecord[]): TimelineSummary =>
   
   const byType: Record<string, number> = {};
   let totalDiagnoses = 0;
-  let totalLabPanels = 0;
+  let totalExtendedLabPanels = 0;
   let totalMedications = 0;
   const allMedications: Medication[] = [];
   const allDiagnoses: Diagnosis[] = [];
@@ -332,7 +327,7 @@ const calculateSummary = (records: ExtractedMedicalRecord[]): TimelineSummary =>
   for (const record of records) {
     byType[record.documentType] = (byType[record.documentType] || 0) + 1;
     totalDiagnoses += record.diagnoses.length;
-    totalLabPanels += record.labPanels.length;
+    totalExtendedLabPanels += record.labPanels.length;
     totalMedications += record.medications.length;
     allMedications.push(...record.medications);
     allDiagnoses.push(...record.diagnoses);
@@ -364,7 +359,7 @@ const calculateSummary = (records: ExtractedMedicalRecord[]): TimelineSummary =>
     totalDocuments: records.length,
     byType,
     totalDiagnoses,
-    totalLabPanels,
+    totalExtendedLabPanels,
     totalMedications,
     activeMedications,
     activeDiagnoses,
@@ -465,14 +460,14 @@ export const formatMedicalTimeline = (
     ].join("\n");
     
     // Track previous lab panel for trends
-    let previousLabPanel: LabPanel | undefined;
+    let previousExtendedLabPanel: ExtendedLabPanel | undefined;
     
     const documentSections = sorted.map((record, index) => {
-      const section = formatDocument(record, index, previousLabPanel);
+      const section = formatDocument(record, index, previousExtendedLabPanel);
       
       // Update previous lab panel for next iteration
       if (record.labPanels.length > 0) {
-        previousLabPanel = record.labPanels[record.labPanels.length - 1];
+        previousExtendedLabPanel = record.labPanels[record.labPanels.length - 1];
       }
       
       return section;

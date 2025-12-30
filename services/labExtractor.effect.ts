@@ -17,14 +17,13 @@
  * end
  */
 
-import { Effect, pipe } from "effect";
+import { Effect } from "effect";
 import {
   LabResult,
   LabPanel,
   LabStatus,
-  decodeLabPanel,
 } from "../schemas/schemas";
-import { LabExtractionError, ValidationError } from "./errors";
+import { LabExtractionError } from "./errors";
 
 // ============================================================================
 // LAB TEST PATTERNS

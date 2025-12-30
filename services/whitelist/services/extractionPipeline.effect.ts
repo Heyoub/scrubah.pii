@@ -13,7 +13,7 @@
  * extract structured clinical data fields.
  */
 
-import { Effect, pipe, Array as A } from "effect";
+import { Effect, pipe } from "effect";
 import { extractMedicalData, type ExtractionInput } from "./medicalExtractor.effect";
 import { formatMedicalTimeline } from "./timelineFormatter.effect";
 import type { ExtractedMedicalRecord } from "../../../schemas/schemas";

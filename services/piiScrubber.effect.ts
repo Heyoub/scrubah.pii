@@ -8,17 +8,32 @@
  * - Railway-oriented programming (graceful degradation)
  * - Errors as values (MLModelError, PIIDetectionWarning)
  * - Immutable state (no mutations)
+ * - SSOT: All types from schemas/schemas.ts
  *
  * Pipeline:
  * 1. Regex pre-pass (structural PII)
- * 2. Smart chunking (sentence-aware)
- * 3. ML inference (BERT NER)
- * 4. Result validation (Effect Schema)
+ * 2. Context-aware detection (labeled names, MRN)
+ * 3. Smart chunking (sentence-aware)
+ * 4. ML inference (BERT NER)
+ * 5. Result validation (Effect Schema)
  */
 
 import { Effect, Context, Layer, pipe } from "effect";
 import { pipeline, env } from "@huggingface/transformers";
-import { ScrubResult, PIIMap, decodeScrubResult } from "../schemas/schemas";
+import {
+  ScrubResult,
+  // Types from SSOT
+  type NEREntity,
+  type PIIEntityType,
+  type MutableScrubState,
+  type LabeledDetection,
+  type ScrubConfig,
+  // Constants from SSOT
+  PII_PATTERNS,
+  MRN_CONTEXT_KEYWORDS,
+  NAME_LABELS,
+  DEFAULT_SCRUB_CONFIG,
+} from "../schemas/schemas";
 import { markAsScrubbed } from "../schemas/phi";
 import { MLModelError, PIIDetectionWarning, ErrorCollector } from "./errors";
 
@@ -26,67 +41,10 @@ import { MLModelError, PIIDetectionWarning, ErrorCollector } from "./errors";
 env.allowLocalModels = false;
 env.useBrowserCache = true;
 
+// ML model target entities
 const TARGET_ENTITIES = ["PER", "LOC", "ORG"] as const;
-type EntityType = (typeof TARGET_ENTITIES)[number];
+type MLEntityType = (typeof TARGET_ENTITIES)[number];
 
-/**
- * NER ENTITY TYPE (Explicit type for ML model output)
- *
- * Per Effect v3 best practices: NEVER use `any` - always explicit types
- * This prevents TypeScript infinite inference with strict mode
- */
-interface NEREntity {
-  readonly entity_group: string;
-  readonly word: string;
-  readonly start: number;
-  readonly end: number;
-  readonly score: number;
-}
-
-/**
- * PATTERNS (Regex for structural PII)
- */
-const PATTERNS = {
-  EMAIL: /\b[\w\.-]+@[\w\.-]+\.\w{2,4}\b/g,
-  PHONE: /(?:\+?1[-. ]?)?\(?([0-9]{3})\)?[-. ]?([0-9]{3})[-. ]?([0-9]{4})/g,
-  SSN: /\b\d{3}-\d{2}-\d{4}\b/g,
-  DATE: /\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b/g,
-  CREDIT_CARD: /\b(?:\d{4}[-\s]?){3}\d{4}\b/g,
-  ZIPCODE: /\b\d{5}(?:-\d{4})?\b/g,
-} as const;
-
-const MRN_CONTEXT_KEYWORDS = [
-  "MRN",
-  "Medical Record Number",
-  "Patient ID",
-  "Patient Number",
-  "Record Number",
-  "Chart Number",
-  "Account Number",
-  "Member ID",
-] as const;
-
-/**
- * ML MODEL SERVICE (Effect Layer for dependency injection)
- *
- * OCaml equivalent:
- * module type MLModel = sig
- *   val load : unit -> (model, error) result
- *   val infer : model -> string -> (entity list, error) result
- * end
- */
-export interface MLModelService {
-  loadModel(): Effect.Effect<void, MLModelError, never>;
-  infer(text: string): Effect.Effect<ReadonlyArray<NEREntity>, MLModelError, never>;
-}
-
-export const MLModelService = Context.GenericTag<MLModelService>(
-  "MLModelService"
-);
-
-/**
- * ML MODEL IMPLEMENTATION (Factory pattern - avoids `this` inference issues)
- */
 /**
  * Intl.Segmenter type (not in all TypeScript libs)
  */
@@ -113,24 +71,45 @@ const createSegmenter = (): IntlSegmenter | undefined => {
   return undefined;
 };
 
+// ============================================================================
+// ML MODEL SERVICE (Effect Layer for dependency injection)
+// ============================================================================
+
+/**
+ * ML MODEL SERVICE INTERFACE
+ *
+ * OCaml equivalent:
+ * module type MLModel = sig
+ *   val load : unit -> (unit, error) result
+ *   val infer : string -> (entity list, error) result
+ * end
+ */
+export interface MLModelService {
+  loadModel(): Effect.Effect<void, MLModelError, never>;
+  infer(text: string): Effect.Effect<ReadonlyArray<NEREntity>, MLModelError, never>;
+}
+
+export const MLModelService = Context.GenericTag<MLModelService>(
+  "MLModelService"
+);
+
 /**
  * Factory function creates MLModelService without `this` inference issues
  * This pattern avoids TypeScript strict mode stack overflow
  */
 function createMLModelService(): MLModelService {
   // Captured state (no `this` needed)
-  let pipe: NERPipeline | null = null;
+  let nerPipeline: NERPipeline | null = null;
   let loadPromise: Promise<void> | null = null;
-  const _segmenter: IntlSegmenter | undefined = createSegmenter();
 
   const loadModel = (): Effect.Effect<void, MLModelError, never> => {
     return Effect.suspend(() => {
-      if (pipe) return Effect.void;
+      if (nerPipeline) return Effect.void;
       if (loadPromise) return Effect.promise(() => loadPromise!);
 
       loadPromise = (async () => {
         try {
-          pipe = await pipeline("token-classification", "Xenova/bert-base-NER", {
+          nerPipeline = await pipeline("token-classification", "Xenova/bert-base-NER", {
             quantized: true,
           } as Parameters<typeof pipeline>[2]) as unknown as NERPipeline;
           console.log("✅ NER Model loaded successfully");
@@ -155,14 +134,14 @@ function createMLModelService(): MLModelService {
 
   const infer = (text: string): Effect.Effect<ReadonlyArray<NEREntity>, MLModelError, never> => {
     return Effect.suspend(() => {
-      const loadFirst = pipe ? Effect.void : loadModel();
+      const loadFirst = nerPipeline ? Effect.void : loadModel();
 
       return loadFirst.pipe(
         Effect.flatMap(() =>
           Effect.tryPromise({
             try: () =>
               Promise.race([
-                pipe!(text, {
+                nerPipeline!(text, {
                   aggregation_strategy: "simple",
                   ignore_labels: ["O"],
                 }),
@@ -187,24 +166,8 @@ function createMLModelService(): MLModelService {
   return { loadModel, infer };
 }
 
-// Helper for sentence segmentation (separate from ML service)
-// @internal Reserved for future chunking optimization
-function _getSentences(text: string): string[] {
-  const segmenter = createSegmenter();
-  if (segmenter) {
-    return Array.from(segmenter.segment(text)).map((s) => s.segment);
-  }
-  return text.match(/[^.!?]+[.!?]+]*/g) || [text];
-}
-
 /**
  * ML MODEL LAYER (for Effect runtime)
- *
- * EXPLICIT TYPE ANNOTATION per Effect v3 best practices:
- * Layer.Layer<Out, Error, In>
- * - Out: MLModelService (what this layer provides)
- * - Error: never (no errors during layer creation)
- * - In: never (no dependencies)
  */
 export const MLModelServiceLive: Layer.Layer<MLModelService, never, never> = Layer.succeed(
   MLModelService,
@@ -213,8 +176,6 @@ export const MLModelServiceLive: Layer.Layer<MLModelService, never, never> = Lay
 
 /**
  * EXPORTED LOAD MODEL (for testing)
- *
- * Pre-loads the ML model so tests don't need to wait for lazy loading
  */
 export const loadModel = async (): Promise<void> => {
   const service = createMLModelService();
@@ -225,8 +186,13 @@ export const loadModel = async (): Promise<void> => {
   });
 };
 
+// ============================================================================
+// CONTEXT-AWARE DETECTION FUNCTIONS
+// ============================================================================
+
 /**
  * CONTEXT-AWARE MRN DETECTION
+ * Uses MRN_CONTEXT_KEYWORDS from schemas (SSOT)
  */
 const detectContextualMRN = (
   text: string
@@ -256,29 +222,104 @@ const detectContextualMRN = (
 };
 
 /**
- * SCRUB STATE (Immutable)
- *
- * OCaml equivalent:
- * type scrub_state = {
- *   text: string;
- *   replacements: pii_map;
- *   counters: entity_counters;
- * }
+ * LABELED NAME DETECTION
+ * Detects names that appear after common labels like "Patient Name:", "Dr.", etc.
+ * Uses NAME_LABELS from schemas (SSOT)
  */
-interface ScrubState {
-  readonly text: string;
-  readonly replacements: PIIMap;
-  readonly counters: Record<string, number>;
-}
+const detectLabeledName = (
+  text: string
+): LabeledDetection[] => {
+  const matches: LabeledDetection[] = [];
+
+  // Build pattern from NAME_LABELS
+  const labelsPattern = NAME_LABELS
+    .map(label => label.replace(/([.*+?^${}()|[\]\\])/g, '\\$1')) // Escape special chars
+    .join("|");
+
+  // Pattern: Label followed by colon/space then name (First Last or Title First Last)
+  const namePattern = new RegExp(
+    `(${labelsPattern})[:\\s]+(?:(Dr\\.|Mr\\.|Ms\\.|Mrs\\.|Miss|Nurse)\\s+)?([A-Z][a-z]+(?:\\s+[A-Z][a-z]+)+)`,
+    "gi"
+  );
+
+  let match;
+  while ((match = namePattern.exec(text)) !== null) {
+    const label = match[1];
+    const title = match[2] || "";
+    const name = match[3];
+    const fullValue = title ? `${title} ${name}` : name;
+
+    // Calculate start position of the name (after label and colon/space)
+    const _labelEnd = match.index + label.length;
+    const valueStart = match[0].indexOf(fullValue, label.length) + match.index;
+
+    matches.push({
+      start: valueStart,
+      end: valueStart + fullValue.length,
+      value: fullValue,
+      label,
+    });
+  }
+
+  return matches;
+};
+
+/**
+ * ADDRESS DETECTION (using new patterns)
+ */
+const detectAddresses = (
+  text: string
+): Array<{ start: number; end: number; value: string; type: PIIEntityType }> => {
+  const matches: Array<{ start: number; end: number; value: string; type: PIIEntityType }> = [];
+
+  // Street addresses
+  const addressPattern = new RegExp(PII_PATTERNS.ADDRESS.source, PII_PATTERNS.ADDRESS.flags);
+  let match;
+  while ((match = addressPattern.exec(text)) !== null) {
+    matches.push({
+      start: match.index,
+      end: match.index + match[0].length,
+      value: match[0],
+      type: "ADDRESS",
+    });
+  }
+
+  // City, State patterns
+  const cityStatePattern = new RegExp(PII_PATTERNS.CITY_STATE.source, PII_PATTERNS.CITY_STATE.flags);
+  while ((match = cityStatePattern.exec(text)) !== null) {
+    matches.push({
+      start: match.index,
+      end: match.index + match[0].length,
+      value: match[0],
+      type: "CITY_STATE",
+    });
+  }
+
+  // P.O. Box patterns
+  const poBoxPattern = new RegExp(PII_PATTERNS.PO_BOX.source, PII_PATTERNS.PO_BOX.flags);
+  while ((match = poBoxPattern.exec(text)) !== null) {
+    matches.push({
+      start: match.index,
+      end: match.index + match[0].length,
+      value: match[0],
+      type: "PO_BOX",
+    });
+  }
+
+  return matches;
+};
+
+// ============================================================================
+// SCRUBBING PHASES
+// ============================================================================
 
 /**
  * PHASE 1: REGEX PRE-PASS
- *
  * Pure function - no side effects
  */
-const regexPrePass = (text: string): ScrubState => {
+const regexPrePass = (text: string, config: ScrubConfig): MutableScrubState => {
   let interimText = text;
-  const replacements: Record<string, string> = {}; // Mutable for building
+  const replacements: Record<string, string> = {};
   const counters: Record<string, number> = {
     PER: 0,
     LOC: 0,
@@ -286,11 +327,19 @@ const regexPrePass = (text: string): ScrubState => {
     EMAIL: 0,
     PHONE: 0,
     ID: 0,
+    ADDRESS: 0,
+    CITY_STATE: 0,
+    ZIP: 0,
+    NAME: 0,
+    PO_BOX: 0,
   };
   const entityToPlaceholder: Record<string, string> = {};
 
   const runRegex = (type: string, regex: RegExp, prefix: string) => {
-    const matches = [...interimText.matchAll(regex)];
+    // Create new regex instance to reset lastIndex
+    const pattern = new RegExp(regex.source, regex.flags);
+    const matches = [...interimText.matchAll(pattern)];
+
     // Iterate backwards to avoid index issues during replacement
     for (let i = matches.length - 1; i >= 0; i--) {
       const match = matches[i];
@@ -310,11 +359,19 @@ const regexPrePass = (text: string): ScrubState => {
     }
   };
 
-  runRegex("EMAIL", PATTERNS.EMAIL, "EMAIL");
-  runRegex("PHONE", PATTERNS.PHONE, "PHONE");
-  runRegex("ID", PATTERNS.SSN, "SSN");
-  runRegex("ID", PATTERNS.CREDIT_CARD, "CARD");
-  runRegex("ID", PATTERNS.ZIPCODE, "ZIP");
+  // Run standard patterns
+  runRegex("EMAIL", PII_PATTERNS.EMAIL, "EMAIL");
+  runRegex("PHONE", PII_PATTERNS.PHONE, "PHONE");
+  runRegex("ID", PII_PATTERNS.SSN, "SSN");
+  runRegex("ID", PII_PATTERNS.CREDIT_CARD, "CARD");
+  runRegex("ZIP", PII_PATTERNS.ZIPCODE, "ZIP");
+
+  // Run new address patterns
+  if (config.enableContextDetection) {
+    runRegex("ADDRESS", PII_PATTERNS.ADDRESS, "ADDR");
+    runRegex("CITY_STATE", PII_PATTERNS.CITY_STATE, "CITY");
+    runRegex("PO_BOX", PII_PATTERNS.PO_BOX, "POBOX");
+  }
 
   // Context-aware MRN
   const mrnMatches = detectContextualMRN(interimText);
@@ -331,6 +388,23 @@ const regexPrePass = (text: string): ScrubState => {
       interimText.substring(end);
   });
 
+  // Labeled name detection
+  if (config.enableContextDetection) {
+    const nameMatches = detectLabeledName(interimText);
+    nameMatches.reverse().forEach(({ start, end, value }) => {
+      if (!entityToPlaceholder[value]) {
+        counters.NAME++;
+        const placeholder = `[NAME_${counters.NAME}]`;
+        entityToPlaceholder[value] = placeholder;
+        replacements[value] = placeholder;
+      }
+      interimText =
+        interimText.substring(0, start) +
+        entityToPlaceholder[value] +
+        interimText.substring(end);
+    });
+  }
+
   return { text: interimText, replacements, counters };
 };
 
@@ -338,8 +412,7 @@ const regexPrePass = (text: string): ScrubState => {
  * PHASE 2: SMART CHUNKING
  */
 const smartChunk = (text: string, maxChunkSize = 2000): string[] => {
-  // Use sentence segmenter if available
-  const segmenter: IntlSegmenter | undefined = createSegmenter();
+  const segmenter = createSegmenter();
 
   const sentences: string[] = segmenter
     ? Array.from(segmenter.segment(text)).map((s) => s.segment)
@@ -363,14 +436,15 @@ const smartChunk = (text: string, maxChunkSize = 2000): string[] => {
 
 /**
  * PHASE 3: ML INFERENCE
- *
  * Effect-based with error collection
+ * Uses configurable confidence threshold from DEFAULT_SCRUB_CONFIG
  */
 const mlInference = (
   chunks: string[],
-  state: ScrubState,
-  errorCollector: ErrorCollector
-): Effect.Effect<ScrubState, never, MLModelService> => {
+  state: MutableScrubState,
+  errorCollector: ErrorCollector,
+  config: ScrubConfig
+): Effect.Effect<MutableScrubState, never, MLModelService> => {
   return Effect.gen(function* (_) {
     const mlModel = yield* _(MLModelService);
     let finalText = "";
@@ -417,15 +491,20 @@ const mlInference = (
         )
       );
 
-      // Filter high-confidence entities - explicit NEREntity type
+      // Filter entities using configurable threshold (FIXED: was 0.85, now uses config)
       const entities: NEREntity[] = entitiesResult.filter(
         (e: NEREntity) =>
-          TARGET_ENTITIES.includes(e.entity_group as EntityType) && e.score > 0.85
+          TARGET_ENTITIES.includes(e.entity_group as MLEntityType) &&
+          e.score > config.mlConfidenceThreshold
       );
 
-      // Warn on low-confidence detections
+      // Warn on low-confidence detections (between threshold and 0.5)
+      const warningThreshold = Math.max(0.5, config.mlConfidenceThreshold - 0.15);
       entitiesResult
-        .filter((e: NEREntity) => e.score <= 0.85 && e.score > 0.5)
+        .filter((e: NEREntity) =>
+          e.score <= config.mlConfidenceThreshold &&
+          e.score > warningThreshold
+        )
         .forEach((e: NEREntity) => {
           errorCollector.add(
             new PIIDetectionWarning({
@@ -440,7 +519,7 @@ const mlInference = (
           );
         });
 
-      // Sort by start index - explicit types prevent inference issues
+      // Sort by start index
       entities.sort((a: NEREntity, b: NEREntity) => a.start - b.start);
 
       let chunkCursor = 0;
@@ -458,7 +537,7 @@ const mlInference = (
         } else {
           // Generate placeholder
           if (!entityToPlaceholder[originalText]) {
-            counters[entity_group]++;
+            counters[entity_group] = (counters[entity_group] || 0) + 1;
             const placeholder = `[${entity_group}_${counters[entity_group]}]`;
             entityToPlaceholder[originalText] = placeholder;
             replacements[originalText] = placeholder;
@@ -483,14 +562,19 @@ const mlInference = (
   });
 };
 
+// ============================================================================
+// MAIN SCRUB FUNCTION (Effect Pipeline)
+// ============================================================================
+
 /**
- * MAIN SCRUB FUNCTION (Effect Pipeline)
+ * MAIN SCRUB FUNCTION
  *
  * OCaml equivalent:
  * val scrub : string -> (scrub_result, app_error) result
  */
 export const scrubPII = (
-  text: string
+  text: string,
+  config: ScrubConfig = DEFAULT_SCRUB_CONFIG
 ): Effect.Effect<
   { result: ScrubResult; errors: ErrorCollector },
   never,
@@ -500,13 +584,18 @@ export const scrubPII = (
     const errorCollector = new ErrorCollector();
 
     // Phase 1: Regex pre-pass (pure)
-    const afterRegex = regexPrePass(text);
+    const afterRegex = regexPrePass(text, config);
 
     // Phase 2: Smart chunking (pure)
     const chunks = smartChunk(afterRegex.text);
 
-    // Phase 3: ML inference (Effect)
-    const finalState = yield* _(mlInference(chunks, afterRegex, errorCollector));
+    // Phase 3: ML inference (Effect) - only if enabled
+    let finalState: MutableScrubState;
+    if (config.enableML) {
+      finalState = yield* _(mlInference(chunks, afterRegex, errorCollector, config));
+    } else {
+      finalState = afterRegex;
+    }
 
     // Build result with branded ScrubbedText type
     const result: ScrubResult = {
@@ -515,10 +604,6 @@ export const scrubPII = (
       count: Object.keys(finalState.replacements).length,
     };
 
-    // Note: We skip schema validation here because ScrubResult uses a branded type
-    // (ScrubbedText) which doesn't match the schema's plain string type.
-    // The result is already properly typed and validated through construction.
-
     return { result, errors: errorCollector };
   });
 };
@@ -526,8 +611,11 @@ export const scrubPII = (
 /**
  * HELPER: Run scrubber (for easy migration from Promise-based code)
  */
-export const runScrubPII = async (text: string): Promise<ScrubResult> => {
-  const program = pipe(scrubPII(text), Effect.provide(MLModelServiceLive));
+export const runScrubPII = async (
+  text: string,
+  config: ScrubConfig = DEFAULT_SCRUB_CONFIG
+): Promise<ScrubResult> => {
+  const program = pipe(scrubPII(text, config), Effect.provide(MLModelServiceLive));
 
   const { result, errors } = await Effect.runPromise(program);
 
@@ -542,7 +630,21 @@ export const runScrubPII = async (text: string): Promise<ScrubResult> => {
   return result;
 };
 
-/**
- * EXPORT HELPERS FOR TESTING
- */
-export { detectContextualMRN, PATTERNS, MRN_CONTEXT_KEYWORDS };
+// ============================================================================
+// EXPORT HELPERS FOR TESTING
+// ============================================================================
+
+// Re-export from schemas for backward compatibility
+export {
+  PII_PATTERNS as PATTERNS,
+  MRN_CONTEXT_KEYWORDS,
+  NAME_LABELS,
+  DEFAULT_SCRUB_CONFIG,
+};
+
+// Export detection functions for testing
+export {
+  detectContextualMRN,
+  detectLabeledName,
+  detectAddresses,
+};

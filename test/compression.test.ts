@@ -245,7 +245,7 @@ describe("Compression Pipeline - Effect-TS", () => {
 
       // Should have deduplication warning
       const errors = result.errors.getAll();
-      const dedupError = errors.find((e) => e._tag === "DeduplicationError");
+      const dedupError = errors.find((e) => e.type === "DeduplicationError");
       expect(dedupError).toBeDefined();
     });
 
@@ -384,7 +384,7 @@ describe("Compression Pipeline - Effect-TS", () => {
       // Should have size warning
       const errors = result.errors.getAll();
       const sizeError = errors.find(
-        (e) => e._tag === "CompressionSizeExceededError"
+        (e) => e.type === "CompressionSizeExceededError"
       );
       expect(sizeError).toBeDefined();
     });
@@ -405,7 +405,7 @@ describe("Compression Pipeline - Effect-TS", () => {
 
       // Should have date ambiguity warning
       const errors = result.errors.getAll();
-      const dateError = errors.find((e) => e._tag === "DateAmbiguityError");
+      const dateError = errors.find((e) => e.type === "DateAmbiguityError");
       expect(dateError).toBeDefined();
       expect(dateError?.suggestion).toContain("date format");
     });

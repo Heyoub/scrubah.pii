@@ -8,8 +8,9 @@ import { env } from '@huggingface/transformers';
 
 // Disable browser cache - not available in Node.js
 env.useBrowserCache = false;
-// Allow remote models to be downloaded
-env.allowRemoteModels = true;
+// Disable remote model loading in tests (too slow) but allow local if cached
+env.allowRemoteModels = false;
+env.allowLocalModels = true;
 // Use local file cache instead of browser cache
 env.cacheDir = './.cache/transformers';
 

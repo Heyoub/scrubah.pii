@@ -124,19 +124,40 @@ This project handles sensitive medical data. When contributing:
 scrubah.pii/
 ├── schemas.ts              # All type definitions with runtime validation
 ├── schemas/
-│   └── phi.ts             # PHI branded types
+│   ├── phi.ts             # PHI branded types
+│   │   ┌───────────────────────────────────────────┐
+│   │   │ PIPELINE 3: Compression Schemas           │
+│   │   └───────────────────────────────────────────┘
+│   ├── ocrQuality.ts             # OCR quality gate schemas
+│   ├── templateDetection.ts      # Template fingerprinting
+│   ├── semanticDedup.ts          # Semantic deduplication
+│   ├── structuredExtraction.ts   # Clinical data extraction
+│   ├── narrativeGeneration.ts    # Narrative output schemas
+│   └── compressionPipeline.ts    # Unified pipeline schemas
+│
 ├── services/
 │   ├── *.effect.ts        # Effect-TS services (preferred)
-│   └── *.ts              # Legacy services
+│   ├── *.ts              # Legacy services
+│   │   ┌───────────────────────────────────────────┐
+│   │   │ PIPELINE 3: Compression Services          │
+│   │   └───────────────────────────────────────────┘
+│   ├── ocrQualityGate.effect.ts        # Filter low-quality scans
+│   ├── templateDetection.effect.ts     # Strip boilerplate
+│   ├── semanticDedup.effect.ts         # Remove similar docs
+│   ├── structuredExtraction.effect.ts  # Extract clinical data
+│   ├── narrativeGeneration.effect.ts   # Generate summaries
+│   └── compressionPipeline.effect.ts   # Unified orchestration
+│
 └── tests/
-    └── *.test.ts         # Test files
+    └── *.test.ts         # Test files (229 compression tests)
 ```
 
 **Important**:
 
-- New types go in `schemas.ts` (not inline in services)
+- New types go in `schemas.ts` or dedicated schema files (not inline in services)
 - New services should use Effect-TS patterns
 - Follow existing file structure
+- Compression pipeline has 229 comprehensive tests across 6 test files
 
 ## Project-Specific Notes
 

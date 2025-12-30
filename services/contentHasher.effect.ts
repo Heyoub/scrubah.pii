@@ -23,8 +23,6 @@ import {
   DuplicateAnalysis,
   DocumentType,
   DifferenceType,
-  decodeDocumentFingerprint,
-  decodeDuplicateAnalysis,
 } from "../schemas/schemas";
 import { ValidationError } from "./errors";
 

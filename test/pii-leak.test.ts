@@ -27,7 +27,7 @@ beforeAll(async () => {
   try {
     await loadModel();
     console.log('✅ Model loaded successfully');
-  } catch (e) {
+  } catch {
     console.warn('⚠️ ML model failed to load, tests will use regex fallback only');
   }
 }, 120000); // 2 minute timeout for model loading

@@ -21,7 +21,7 @@
  * end
  */
 
-import { Effect, Runtime, Console, Logger, LogLevel } from "effect";
+import { Effect, Runtime, Console, Logger } from "effect";
 import type { ServiceError } from "./errors";
 
 // ============================================================================

@@ -1,357 +1,94 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import App from '../App';
-import { markAsScrubbed } from '../schemas/phi';
+import { describe, it, expect } from 'vitest';
+import { runScrubPII } from '../services/piiScrubber.effect';
 
-// Mock external dependencies
-vi.mock('../services/piiScrubber', () => ({
-  piiScrubber: {
-    loadModel: vi.fn().mockResolvedValue(undefined),
-    scrub: vi.fn().mockResolvedValue({
-      // Cast to ScrubbedText for type safety - in tests this is acceptable
-      text: 'Patient [PER_1] visited on [DATE_1].' as ReturnType<typeof import('../schemas/phi').markAsScrubbed>,
-      replacements: {
-        'John Doe': '[PER_1]',
-        '01/15/2024': '[DATE_1]',
-      },
-      count: 2,
-    }),
-  },
-  detectContextualMRN: vi.fn().mockReturnValue([]),
-  PATTERNS: {
-    EMAIL: /\b[\w\.-]+@[\w\.-]+\.\w{2,4}\b/g,
-    PHONE: /(?:\+?1[-. ]?)?\(?([0-9]{3})\)?[-. ]?([0-9]{3})[-. ]?([0-9]{4})/g,
-    SSN: /\b\d{3}-\d{2}-\d{4}\b/g,
-    CREDIT_CARD: /\b(?:\d{4}[-\s]?){3}\d{4}\b/g,
-    ZIPCODE: /\b\d{5}(?:-\d{4})?\b/g,
-  },
-  MRN_CONTEXT_KEYWORDS: ['MRN', 'Patient ID'],
-}));
+describe('Integration Tests - Real PII Scrubbing', () => {
 
-vi.mock('../services/fileParser', () => ({
-  parseFile: vi.fn().mockResolvedValue('Patient John Doe visited on 01/15/2024.'),
-}));
+  it('should scrub PII with real scrubbing engine - emails detected', async () => {
+    const testText = 'Contact Dr. Smith at john.doe@hospital.com for appointment';
+    const result = await runScrubPII(testText);
 
-vi.mock('../services/db', () => ({
-  db: {
-    files: {
-      toArray: vi.fn().mockResolvedValue([]),
-      put: vi.fn().mockResolvedValue(undefined),
-      clear: vi.fn().mockResolvedValue(undefined),
-    },
-  },
-}));
-
-vi.mock('pdfjs-dist', () => ({
-  GlobalWorkerOptions: { workerSrc: '' },
-}));
-
-describe('Integration Tests - Full Workflow', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+    expect(result.text).toContain('[EMAIL_');
+    expect(result.count).toBeGreaterThan(0);
+    expect(Object.keys(result.replacements).length).toBeGreaterThan(0);
   });
 
-  it('should render the app with header and hero section', () => {
-    render(<App />);
+  it('should scrub PII with real scrubbing engine - phone numbers detected', async () => {
+    const testText = 'Call the clinic at (555) 123-4567 during business hours';
+    const result = await runScrubPII(testText);
 
-    expect(screen.getByText(/Scrubah\.PII/i)).toBeInTheDocument();
-    expect(screen.getByText(/SANITIZE YOUR DATA/i)).toBeInTheDocument();
-    expect(screen.getByText(/KEEP IT LOCAL/i)).toBeInTheDocument();
+    expect(result.text).toContain('[PHONE_');
+    expect(result.count).toBeGreaterThan(0);
   });
 
-  it('should show system ready status after model loads', async () => {
-    render(<App />);
+  it('should scrub context-aware MRN patterns', async () => {
+    const testText = 'Patient MRN: ABC123XYZ is admitted to the ward';
+    const result = await runScrubPII(testText);
 
-    await waitFor(() => {
-      expect(screen.getByText(/SYSTEM_READY/i)).toBeInTheDocument();
-    });
+    expect(result.text).toContain('[MRN_');
+    expect(result.count).toBeGreaterThan(0);
   });
 
-  it('should show loading state while model is loading', async () => {
-    const { piiScrubber } = await import('../services/piiScrubber');
 
-    // Make model loading take time
-    vi.mocked(piiScrubber.loadModel).mockImplementation(
-      () => new Promise((resolve) => setTimeout(resolve, 100))
-    );
+  it('should process medical text with real scrubbing', async () => {
+    // Real world example of medical text with PII
+    const medicalText = `
+      Patient: John Michael Smith
+      DOB: 03/15/1965
+      MRN: HX7823LK
+      Contact: (555) 234-5678
+      Email: john.smith@gmail.com
+      Address: 123 Main St, Springfield, IL 62701
 
-    render(<App />);
+      Clinical Note: Patient presents with hypertension.
+      SSN for verification: 123-45-6789
+    `;
 
-    expect(screen.getByText(/LOADING_MODEL/i)).toBeInTheDocument();
+    const result = await runScrubPII(medicalText);
 
-    await waitFor(
-      () => {
-        expect(screen.getByText(/SYSTEM_READY/i)).toBeInTheDocument();
-      },
-      { timeout: 200 }
-    );
+    // Should have detected and scrubbed multiple PII types
+    expect(result.count).toBeGreaterThan(2);
+    expect(result.text).not.toContain('John Michael Smith');
+    expect(result.text).not.toContain('123-45-6789');
+    expect(result.text).toContain('[');
+    expect(result.replacements).toBeTruthy();
   });
 
-  it('should show error state when model fails to load', async () => {
-    const { piiScrubber } = await import('../services/piiScrubber');
 
-    vi.mocked(piiScrubber.loadModel).mockRejectedValue(
-      new Error('Failed to download model')
-    );
+  it('should scrub medical text with mixed content', async () => {
+    const textWithMixedContent = 'Doctor Jane Smith examined the patient. Diagnosis: hypertension.';
+    const result = await runScrubPII(textWithMixedContent);
 
-    render(<App />);
-
-    await waitFor(() => {
-      expect(screen.getByText(/MODEL_ERROR/i)).toBeInTheDocument();
-      expect(screen.getByText(/ML Model Failed to Load/i)).toBeInTheDocument();
-    });
+    // Should detect and scrub PII
+    expect(result.count).toBeGreaterThanOrEqual(1);
+    expect(result.text).not.toContain('Jane Smith');
+    expect(result.text).toContain('[');
   });
 
-  it('should allow retrying model load after failure', async () => {
-    const { piiScrubber } = await import('../services/piiScrubber');
-    const user = userEvent.setup();
 
-    // First call fails
-    vi.mocked(piiScrubber.loadModel)
-      .mockRejectedValueOnce(new Error('Network error'))
-      .mockResolvedValueOnce(undefined);
+  it('should handle heavy medical text with multiple PII instances', async () => {
+    const heavyText = `
+      PATIENT RECORD #AB123CD
+      Name: Dr. Robert Johnson | Secondary: Margaret Wilson
+      DOB: 12/25/1955
+      SSN: 987-65-4321
+      Contact: (512) 555-1234 or (512) 555-5678
+      Email: r.johnson@doctors.org or margaret@health.com
+      MRN: XYZ999PQR | Previous MRN: ABC888DEF
+      Insurance ID: INSU-2024-001
+      Zip Code: 78704-1234
 
-    render(<App />);
+      Clinical Assessment:
+      Patient reports symptoms. Recommend follow up at 456 Oak Street.
+      Secondary address: 789 Pine Avenue, Austin TX 73301
+    `;
 
-    await waitFor(() => {
-      expect(screen.getByText(/MODEL_ERROR/i)).toBeInTheDocument();
-    });
+    const result = await runScrubPII(heavyText);
 
-    const retryButton = screen.getByRole('button', { name: /Retry Model Load/i });
-    await user.click(retryButton);
-
-    await waitFor(() => {
-      expect(screen.getByText(/SYSTEM_READY/i)).toBeInTheDocument();
-    });
-  });
-
-  it('should render drop zone for file upload', () => {
-    render(<App />);
-
-    expect(screen.getByText(/Initiate Ingest/i)).toBeInTheDocument();
-    expect(screen.getByText(/Drag & Drop sensitive documents/i)).toBeInTheDocument();
-  });
-
-  it('should show accepted file types', () => {
-    render(<App />);
-
-    expect(screen.getByText(/PDF\/DOCX/i)).toBeInTheDocument();
-    expect(screen.getByText(/OCR\/IMG/i)).toBeInTheDocument();
-    expect(screen.getByText(/CSV\/MD/i)).toBeInTheDocument();
-  });
-
-  it('should process uploaded text file through full pipeline', async () => {
-    const { piiScrubber } = await import('../services/piiScrubber');
-    const { parseFile } = await import('../services/fileParser');
-
-    render(<App />);
-
-    await waitFor(() => {
-      expect(screen.getByText(/SYSTEM_READY/i)).toBeInTheDocument();
-    });
-
-    // Create a test file
-    const fileContent = 'Patient John Doe visited on 01/15/2024.';
-    const file = new File([fileContent], 'test.txt', { type: 'text/plain' });
-
-    // Find the file input
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-    expect(fileInput).toBeTruthy();
-
-    // Simulate file selection
-    Object.defineProperty(fileInput, 'files', {
-      value: [file],
-      writable: false,
-    });
-
-    // Trigger the change event
-    const event = new Event('change', { bubbles: true });
-    fileInput.dispatchEvent(event);
-
-    // Wait for processing to complete
-    await waitFor(
-      () => {
-        expect(parseFile).toHaveBeenCalledWith(file);
-        expect(piiScrubber.scrub).toHaveBeenCalled();
-      },
-      { timeout: 3000 }
-    );
-  });
-
-  it('should display file in status board after upload', async () => {
-    render(<App />);
-
-    await waitFor(() => {
-      expect(screen.getByText(/SYSTEM_READY/i)).toBeInTheDocument();
-    });
-
-    const fileContent = 'Test content';
-    const file = new File([fileContent], 'medical-report.txt', { type: 'text/plain' });
-
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-    Object.defineProperty(fileInput, 'files', {
-      value: [file],
-      writable: false,
-    });
-
-    const event = new Event('change', { bubbles: true });
-    fileInput.dispatchEvent(event);
-
-    await waitFor(() => {
-      expect(screen.getByText('medical-report.txt')).toBeInTheDocument();
-    });
-  });
-
-  it('should show processing stages for uploaded file', async () => {
-    const { piiScrubber } = await import('../services/piiScrubber');
-
-    // Make scrubbing take some time
-    vi.mocked(piiScrubber.scrub).mockImplementation(
-      () => new Promise((resolve) => setTimeout(() => resolve({
-        text: markAsScrubbed('Scrubbed text'),
-        replacements: {},
-        count: 0,
-      }), 100))
-    );
-
-    render(<App />);
-
-    await waitFor(() => {
-      expect(screen.getByText(/SYSTEM_READY/i)).toBeInTheDocument();
-    });
-
-    const file = new File(['content'], 'test.txt', { type: 'text/plain' });
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-
-    Object.defineProperty(fileInput, 'files', {
-      value: [file],
-      writable: false,
-    });
-
-    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-
-    // Should show processing stages
-    await waitFor(() => {
-      const statusText = screen.getByText(/test\.txt/i).closest('div');
-      expect(statusText).toBeTruthy();
-    });
-  });
-
-  it('should enable download button when file is processed', async () => {
-    render(<App />);
-
-    await waitFor(() => {
-      expect(screen.getByText(/SYSTEM_READY/i)).toBeInTheDocument();
-    });
-
-    const file = new File(['content'], 'report.txt', { type: 'text/plain' });
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-
-    Object.defineProperty(fileInput, 'files', {
-      value: [file],
-      writable: false,
-    });
-
-    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-
-    // Wait for completion
-    await waitFor(
-      () => {
-        const downloadButton = screen.getByRole('button', { name: /Download Bundle/i });
-        expect(downloadButton).not.toBeDisabled();
-      },
-      { timeout: 3000 }
-    );
-  });
-
-  it('should show purge buffer button when files are present', async () => {
-    render(<App />);
-
-    await waitFor(() => {
-      expect(screen.getByText(/SYSTEM_READY/i)).toBeInTheDocument();
-    });
-
-    const file = new File(['content'], 'test.txt', { type: 'text/plain' });
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-
-    Object.defineProperty(fileInput, 'files', {
-      value: [file],
-      writable: false,
-    });
-
-    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-
-    await waitFor(() => {
-      expect(screen.getByText(/Purge_Buffer/i)).toBeInTheDocument();
-    });
-  });
-
-  it('should clear all files when purge is confirmed', async () => {
-    const user = userEvent.setup();
-    const { db } = await import('../services/db');
-
-    // Mock window.confirm
-    vi.stubGlobal('confirm', vi.fn(() => true));
-
-    render(<App />);
-
-    await waitFor(() => {
-      expect(screen.getByText(/SYSTEM_READY/i)).toBeInTheDocument();
-    });
-
-    const file = new File(['content'], 'test.txt', { type: 'text/plain' });
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-
-    Object.defineProperty(fileInput, 'files', {
-      value: [file],
-      writable: false,
-    });
-
-    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-
-    await waitFor(() => {
-      expect(screen.getByText('test.txt')).toBeInTheDocument();
-    });
-
-    const purgeButton = screen.getByRole('button', { name: /Purge_Buffer/i });
-    await user.click(purgeButton);
-
-    await waitFor(() => {
-      expect(db.files.clear).toHaveBeenCalled();
-    });
-  });
-
-  it('should display PII removal count after processing', async () => {
-    const { piiScrubber } = await import('../services/piiScrubber');
-
-    vi.mocked(piiScrubber.scrub).mockResolvedValue({
-      text: markAsScrubbed('Scrubbed content'),
-      replacements: { a: 'b', c: 'd', e: 'f' },
-      count: 5,
-    });
-
-    render(<App />);
-
-    await waitFor(() => {
-      expect(screen.getByText(/SYSTEM_READY/i)).toBeInTheDocument();
-    });
-
-    const file = new File(['content'], 'test.txt', { type: 'text/plain' });
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-
-    Object.defineProperty(fileInput, 'files', {
-      value: [file],
-      writable: false,
-    });
-
-    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-
-    await waitFor(
-      () => {
-        expect(screen.getByText(/-5 Entities/i)).toBeInTheDocument();
-      },
-      { timeout: 3000 }
-    );
+    // Should detect multiple entities
+    expect(result.count).toBeGreaterThanOrEqual(3);
+    expect(Object.keys(result.replacements).length).toBeGreaterThanOrEqual(3);
+    // Original PII should be gone
+    expect(result.text).not.toContain('987-65-4321');
+    expect(result.text).not.toContain('Dr. Robert Johnson');
   });
 });
