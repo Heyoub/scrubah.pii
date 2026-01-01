@@ -39,6 +39,9 @@ build/
 .env.local
 .env.*.local
 
+package-lock.json
+bun.lock
+
 # Archive
 /.archive/**
 

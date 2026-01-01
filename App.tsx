@@ -18,13 +18,23 @@ import { DropZone } from './components/DropZone';
 import { StatusBoard } from './components/StatusBoard';
 import { runParseFile as parseFile } from './services/fileParser.effect';
 import { loadModel, runScrubPII as scrubPII } from './services/piiScrubber.effect';
+import { DEFAULT_SCRUB_CONFIG } from './schemas/schemas';
 import { formatToMarkdownSync as formatToMarkdown } from './services/markdownFormatter.effect';
 import { runBuildMasterTimeline as buildMasterTimeline } from './services/timelineOrganizer.effect';
 import { db } from './services/db';
+import { validateFile } from './services/fileValidation';
+import { getScrubberWorker } from './services/scrubberWorker';
+import { generateId } from './services/id';
+import { appLogger, isProductionMode } from './services/appLogger';
 import { ProcessedFile, ProcessingStage } from './schemas/schemas';
 
+type UIProcessedFile = ProcessedFile & {
+  readonly progressStage?: string;
+  readonly progressPercent?: number;
+};
+
 const App: React.FC = () => {
-  const [files, setFiles] = useState<ProcessedFile[]>([]);
+  const [files, setFiles] = useState<UIProcessedFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [modelLoading, setModelLoading] = useState(false);
   const [modelError, setModelError] = useState<string | null>(null);
@@ -38,7 +48,7 @@ const App: React.FC = () => {
         await loadModel();
       } catch (e) {
         const errorMsg = e instanceof Error ? e.message : 'Unknown error loading ML model';
-        console.error("Model failed to load", e);
+        appLogger.error('model_load_failed', { errorMessage: errorMsg });
         setModelError(errorMsg);
       } finally {
         setModelLoading(false);
@@ -55,22 +65,46 @@ const App: React.FC = () => {
 
   const handleFilesDropped = useCallback(async (droppedFiles: File[]) => {
     if (!modelLoading) {
-      loadModel().catch(console.error);
+      loadModel().catch((e) => {
+        const errorMsg = e instanceof Error ? e.message : String(e);
+        appLogger.warn('model_load_failed_background', { errorMessage: errorMsg });
+      });
     }
 
-    const newFiles: ProcessedFile[] = droppedFiles.map(f => ({
-      id: crypto.randomUUID(),
-      originalName: f.name,
-      size: f.size,
-      type: f.type,
+    const validated = droppedFiles.map((f) => ({ file: f, validation: validateFile(f) }));
+    const rejected = validated.filter((v) => !v.validation.ok);
+    const accepted = validated.filter((v) => v.validation.ok);
+
+    if (rejected.length > 0) {
+      const message = rejected
+        .map((r) => {
+          const name = r.validation.normalizedName || r.file.name || 'unknown';
+          const reasons = r.validation.issues.map((i) => i.message).join(' ');
+          return `${name}: ${reasons}`;
+        })
+        .join('\n');
+      alert(`Some files were rejected:\n\n${message}`);
+    }
+
+    if (accepted.length === 0) {
+      return;
+    }
+
+    const rawFiles = accepted.map((a) => a.file);
+
+    const newFiles: UIProcessedFile[] = accepted.map(a => ({
+      id: generateId(),
+      originalName: a.validation.normalizedName || a.file.name,
+      size: a.file.size,
+      type: a.file.type,
       stage: ProcessingStage.QUEUED
     }));
 
     setFiles(prev => [...prev, ...newFiles]);
-    processQueue(droppedFiles, newFiles);
+    processQueue(rawFiles, newFiles);
   }, [modelLoading]);
 
-  const processQueue = async (rawFiles: File[], fileEntries: ProcessedFile[]) => {
+  const processQueue = async (rawFiles: File[], fileEntries: UIProcessedFile[]) => {
     setIsProcessing(true);
 
     for (let i = 0; i < rawFiles.length; i++) {
@@ -84,46 +118,78 @@ const App: React.FC = () => {
         const rawText = await parseFile(rawFile);
 
         // 2. Scrubbing Stage
-        updateFileStatus(fileEntry.id, ProcessingStage.SCRUBBING, { rawText });
-        const scrubResult = await scrubPII(rawText);
+        updateFileStatus(fileEntry.id, ProcessingStage.SCRUBBING, { rawText, progressStage: 'Initializing worker...', progressPercent: 0 });
+
+        const worker = getScrubberWorker();
+        const regexResult = await worker.scrub(rawText, {
+          filename: fileEntry.originalName,
+          onProgress: (stage, percent) => {
+            updateFileStatus(fileEntry.id, ProcessingStage.SCRUBBING, {
+              progressStage: stage,
+              progressPercent: percent,
+            });
+          },
+        });
+
+        updateFileStatus(fileEntry.id, ProcessingStage.SCRUBBING, { progressStage: 'ML inference...', progressPercent: 100 });
+        const scrubResult = await scrubPII(regexResult.text, {
+          ...DEFAULT_SCRUB_CONFIG,
+          enableRegex: false,
+          enableContextDetection: false,
+          enableML: true,
+        });
+
+        const mergedReplacements = {
+          ...regexResult.replacements,
+          ...scrubResult.replacements,
+        };
+
+        const mergedScrubResult = {
+          ...scrubResult,
+          replacements: mergedReplacements,
+          count: Object.keys(mergedReplacements).length,
+        };
 
         // 3. Formatting Stage
         updateFileStatus(fileEntry.id, ProcessingStage.FORMATTING);
 
         const processingTimeMs = performance.now() - startTime;
-        const markdown = formatToMarkdown(fileEntry, scrubResult, processingTimeMs);
+        const markdown = formatToMarkdown(fileEntry, mergedScrubResult, processingTimeMs);
 
         const stats = {
-          piiRemovedCount: scrubResult.count,
+          piiRemovedCount: mergedScrubResult.count,
           processingTimeMs
         };
 
         const completedFile = {
           ...fileEntry,
           stage: ProcessingStage.COMPLETED,
-          scrubbedText: scrubResult.text,
+          scrubbedText: mergedScrubResult.text,
           markdown,
-          stats
+          stats,
+          progressStage: undefined,
+          progressPercent: undefined,
         };
 
         updateFileState(fileEntry.id, completedFile);
-        await db.files.put(completedFile);
+        const { progressStage: _progressStage, progressPercent: _progressPercent, ...persistable } = completedFile;
+        await db.files.put(persistable);
 
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        console.error(`Error processing ${fileEntry.originalName}`, error);
-        updateFileStatus(fileEntry.id, ProcessingStage.ERROR, { error: errorMessage });
+        appLogger.error('file_processing_failed', { file: fileEntry.originalName, errorMessage });
+        updateFileStatus(fileEntry.id, ProcessingStage.ERROR, { error: errorMessage, progressStage: undefined, progressPercent: undefined });
       }
     }
 
     setIsProcessing(false);
   };
 
-  const updateFileStatus = (id: string, stage: ProcessingStage, updates: Partial<ProcessedFile> = {}) => {
+  const updateFileStatus = (id: string, stage: ProcessingStage, updates: Partial<UIProcessedFile> = {}) => {
     setFiles(prev => prev.map(f => f.id === id ? { ...f, stage, ...updates } : f));
   };
 
-  const updateFileState = (id: string, fullFile: ProcessedFile) => {
+  const updateFileState = (id: string, fullFile: UIProcessedFile) => {
     setFiles(prev => prev.map(f => f.id === id ? fullFile : f));
   };
 
@@ -134,7 +200,7 @@ const App: React.FC = () => {
       await loadModel();
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : 'Unknown error loading ML model';
-      console.error("Model failed to load", e);
+      appLogger.error('model_load_failed', { errorMessage: errorMsg });
       setModelError(errorMsg);
     } finally {
       setModelLoading(false);
@@ -189,8 +255,8 @@ const App: React.FC = () => {
     setIsGeneratingTimeline(true);
 
     try {
-      if (process.env.NODE_ENV !== 'production') {
-        console.log(`📊 Generating master timeline from ${completedFiles.length} documents...`);
+      if (!isProductionMode()) {
+        appLogger.debug('timeline_generate_start', { documentCount: completedFiles.length });
       }
       const timeline = await buildMasterTimeline(completedFiles);
 
@@ -203,13 +269,17 @@ const App: React.FC = () => {
       a.click();
       URL.revokeObjectURL(url);
 
-      if (process.env.NODE_ENV !== 'production') {
-        console.log('✅ Master timeline generated successfully!');
-        console.log(`📈 Stats: ${timeline.summary.totalDocuments} total, ${timeline.summary.uniqueDocuments} unique, ${timeline.summary.duplicates} duplicates`);
+      if (!isProductionMode()) {
+        appLogger.debug('timeline_generate_success', {
+          totalDocuments: timeline.summary.totalDocuments,
+          uniqueDocuments: timeline.summary.uniqueDocuments,
+          duplicates: timeline.summary.duplicates,
+        });
       }
 
     } catch (error) {
-      console.error('Error generating timeline:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      appLogger.error('timeline_generate_failed', { errorMessage });
       alert('Failed to generate timeline. Check console for details.');
     } finally {
       setIsGeneratingTimeline(false);

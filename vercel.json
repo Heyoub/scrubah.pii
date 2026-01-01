@@ -1,5 +1,5 @@
 {
-  "installCommand": "pnpm install",
+  "installCommand": "corepack enable && corepack prepare pnpm@9.15.4 --activate && pnpm install",
   "buildCommand": "pnpm run build",
   "outputDirectory": "dist",
   "framework": null,

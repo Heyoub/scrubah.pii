@@ -22,6 +22,8 @@ import { TextItem } from "pdfjs-dist/types/src/display/api";
 import mammoth from "mammoth";
 import Tesseract from "tesseract.js";
 import { AppError, PDFParseError, OCRError, FileSystemError } from "./errors";
+import { validateFile } from "./fileValidation";
+import { appLogger } from "./appLogger";
 import {
   OCRQualityResult,
   defaultOCRQualityConfig,
@@ -114,7 +116,7 @@ const parseImage = (file: File): Effect.Effect<ParseResult, OCRError, never> => 
           const res = await Tesseract.recognize(file, "eng", {
             logger: (m) => {
               if (m.status === "recognizing text") {
-                console.debug(`[OCR] Progress: ${Math.round(m.progress * 100)}%`);
+                appLogger.debug('ocr_progress', { percent: Math.round(m.progress * 100) });
               }
             },
           });
@@ -155,10 +157,12 @@ const parseImage = (file: File): Effect.Effect<ParseResult, OCRError, never> => 
     const ocrQuality = yield* _(qualityProgram);
 
     // Log quality assessment
-    console.log(
-      `[OCR Quality] ${file.name}: score=${ocrQuality.score.toFixed(2)}, ` +
-        `level=${ocrQuality.level}, flags=[${ocrQuality.flags.join(", ")}]`
-    );
+    appLogger.debug('ocr_quality', {
+      file: file.name,
+      score: Number(ocrQuality.score.toFixed(2)),
+      level: ocrQuality.level,
+      flags: ocrQuality.flags,
+    });
 
     return {
       text: result.data.text,
@@ -201,9 +205,7 @@ const parsePDFPage = (
       .join("");
 
     if (rawPageText.length < 50) {
-      console.log(
-        `Page ${pageNum} appears scanned. Engaging OCR...`
-      );
+      appLogger.debug('pdf_page_scanned_ocr', { page: pageNum });
 
       // Render page to canvas
       const viewport = page.getViewport({ scale: 2.0 });
@@ -259,7 +261,7 @@ const parsePDFPage = (
               const res = await Tesseract.recognize(blob, "eng", {
                 logger: (m) => {
                   if (m.status === "recognizing text") {
-                    console.debug(`[OCR Page ${pageNum}] ${Math.round(m.progress * 100)}%`);
+                    appLogger.debug('ocr_page_progress', { page: pageNum, percent: Math.round(m.progress * 100) });
                   }
                 },
               });
@@ -311,10 +313,12 @@ const parsePDFPage = (
         ocrQuality = yield* _(qualityProgram);
         ocrQuality = { ...ocrQuality, pageNumber: pageNum };
 
-        console.log(
-          `[OCR Quality Page ${pageNum}] score=${ocrQuality.score.toFixed(2)}, ` +
-            `level=${ocrQuality.level}, flags=[${ocrQuality.flags.join(", ")}]`
-        );
+        appLogger.debug('ocr_quality_page', {
+          page: pageNum,
+          score: Number(ocrQuality.score.toFixed(2)),
+          level: ocrQuality.level,
+          flags: ocrQuality.flags,
+        });
 
         // If LOW quality and TrOCR available, attempt repair
         if (
@@ -322,10 +326,10 @@ const parsePDFPage = (
           ocrQuality.lowConfidenceRegions.length > 0 &&
           defaultOCRQualityConfig.enableTrOCR
         ) {
-          console.log(
-            `[OCR Quality Page ${pageNum}] Attempting TrOCR repair on ` +
-              `${ocrQuality.lowConfidenceRegions.length} low-confidence regions...`
-          );
+          appLogger.debug('trocr_attempt', {
+            page: pageNum,
+            lowConfidenceRegions: ocrQuality.lowConfidenceRegions.length,
+          });
 
           // TrOCR repair would happen here with canvas access
           // For now, just flag that repair was attempted
@@ -722,6 +726,19 @@ const convertHtmlToMarkdown = (html: string): string => {
 class FileParserServiceImpl implements FileParserService {
   readonly parseFile = (file: File) => {
     return Effect.gen(function* (_) {
+      const validation = validateFile(file);
+      if (!validation.ok) {
+        return yield* _(
+          Effect.fail(
+            new PDFParseError({
+              file: validation.normalizedName || file.name,
+              reason: validation.issues.map((i) => i.message).join(" "),
+              suggestion: "Rename the file and ensure it matches a supported format.",
+            })
+          )
+        );
+      }
+
       const fileType = file.type;
 
       // PDF

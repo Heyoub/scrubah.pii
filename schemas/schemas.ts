@@ -1143,7 +1143,7 @@ export interface LabeledDetection {
 export const PII_PATTERNS = {
   EMAIL: /\b[\w\.-]+@[\w\.-]+\.\w{2,}\b/g,
   PHONE: /(?:\+?1[-. ]?)?\(?([0-9]{3})\)?[-. ]?([0-9]{3})[-. ]?([0-9]{4})/g,
-  SSN: /\b\d{3}-\d{2}-\d{4}\b/g,
+  SSN: /\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b/g,
   DATE: /\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b/g,
   CREDIT_CARD: /\b(?:\d{4}[-\s]?){3}\d{4}\b/g,
   ZIPCODE: /\b\d{5}(?:-\d{4})?\b/g,

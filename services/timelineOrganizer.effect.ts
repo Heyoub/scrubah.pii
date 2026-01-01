@@ -16,6 +16,7 @@
 
 import { Effect } from "effect";
 import { parse, isValid } from "date-fns";
+import { appLogger } from "./appLogger";
 import {
   ProcessedFile,
   DocumentFingerprint,
@@ -183,7 +184,7 @@ export const extractPrimaryDate = (
     );
   }
 
-  console.warn(`No date found for: ${filename}, using current date`);
+  appLogger.warn('timeline_date_missing', { filename });
   return new Date();
 };
 
@@ -385,8 +386,8 @@ const generateTimelineMarkdown = (
     if (doc.duplicationInfo?.isDuplicate) {
       sections.push(
         `### [DUPLICATE] ${doc.displayDate} | ${doc.filename}\n` +
-          `⚠️ This document is a ${doc.duplicationInfo.differenceType} of document #${getOriginalDocNumber(documents, doc.duplicationInfo.duplicateOf!)} ` +
-          `(${(doc.duplicationInfo.similarity * 100).toFixed(1)}% similar). Content omitted to reduce redundancy.\n`
+        `⚠️ This document is a ${doc.duplicationInfo.differenceType} of document #${getOriginalDocNumber(documents, doc.duplicationInfo.duplicateOf!)} ` +
+        `(${(doc.duplicationInfo.similarity * 100).toFixed(1)}% similar). Content omitted to reduce redundancy.\n`
       );
       continue;
     }
@@ -401,10 +402,10 @@ const generateTimelineMarkdown = (
     const emoji = getDocTypeEmoji(doc.fingerprint.documentType);
     sections.push(
       `### ${emoji} ${doc.displayDate} | ${doc.filename}\n` +
-        `**Document #${doc.documentNumber}** | Type: ${formatDocTypeName(doc.fingerprint.documentType)} | ` +
-        `Hash: \`${doc.fingerprint.contentHash.substring(0, 8)}\`` +
-        relationNote +
-        "\n"
+      `**Document #${doc.documentNumber}** | Type: ${formatDocTypeName(doc.fingerprint.documentType)} | ` +
+      `Hash: \`${doc.fingerprint.contentHash.substring(0, 8)}\`` +
+      relationNote +
+      "\n"
     );
 
     // Lab results get special formatting
@@ -505,9 +506,7 @@ export const buildMasterTimeline = (
     const reverseOrder = options?.reverseChronological || false;
     const errorCollector = new ErrorCollector();
 
-    console.log(
-      `🗓️ Building master timeline (${reverseOrder ? "newest → oldest" : "oldest → newest"})...`
-    );
+    appLogger.info('timeline_build_start', { reverseChronological: reverseOrder });
 
     // Step 1: Generate fingerprints and temporal data
     const timelineDocuments: TimelineDocument[] = [];
@@ -555,9 +554,11 @@ export const buildMasterTimeline = (
       reverseOrder
     );
 
-    console.log(
-      `✅ Timeline built: ${summary.totalDocuments} docs, ${summary.uniqueDocuments} unique`
-    );
+    appLogger.info('timeline_build_complete', {
+      totalDocuments: summary.totalDocuments,
+      uniqueDocuments: summary.uniqueDocuments,
+      duplicates: summary.duplicates,
+    });
 
     const timeline: MasterTimeline = {
       documents: withDuplicates,
@@ -582,10 +583,7 @@ export const runBuildMasterTimeline = async (
 
   // Log warnings if any
   if (errors.hasErrors()) {
-    console.warn(
-      `⚠️ Timeline built with ${errors.count()} warnings:`,
-      errors.toJSON()
-    );
+    appLogger.warn('timeline_build_warnings', { warningCount: errors.count() });
   }
 
   return timeline;

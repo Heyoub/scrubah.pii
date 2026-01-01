@@ -7,6 +7,7 @@
 
 import type { AuditReport } from './auditCollector';
 import type { WorkerResponse } from './scrubber.worker';
+import { appLogger } from './appLogger';
 
 export interface WorkerScrubResult {
   text: string;
@@ -34,7 +35,7 @@ class ScrubberWorkerManager {
 
   private initWorker(): void {
     if (typeof Worker === 'undefined') {
-      console.warn('Web Workers not supported, falling back to main thread');
+      appLogger.warn('worker_unavailable');
       return;
     }
 
@@ -50,7 +51,7 @@ class ScrubberWorkerManager {
       };
 
       this.worker.onerror = (error) => {
-        console.error('Worker error:', error);
+        appLogger.error('worker_error', { errorMessage: error?.message });
         // Reject all pending jobs
         for (const [_jobId, job] of this.pendingJobs) {
           job.reject(new Error('Worker error: ' + error.message));
@@ -58,9 +59,10 @@ class ScrubberWorkerManager {
         this.pendingJobs.clear();
       };
 
-      console.log('✅ Scrubber Web Worker initialized');
+      appLogger.info('worker_initialized');
     } catch (error) {
-      console.warn('Failed to initialize Web Worker:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      appLogger.warn('worker_init_failed', { errorMessage });
       this.worker = null;
     }
   }
@@ -97,7 +99,7 @@ class ScrubberWorkerManager {
   async scrub(text: string, options: WorkerScrubOptions = {}): Promise<WorkerScrubResult> {
     // If no worker, fall back to main thread (import piiScrubber dynamically)
     if (!this.worker) {
-      console.log('⚠️ No Web Worker, using main thread');
+      appLogger.warn('worker_fallback_main_thread');
       const { runScrubPII, DEFAULT_SCRUB_CONFIG } = await import('./piiScrubber.effect');
       const result = await runScrubPII(text, DEFAULT_SCRUB_CONFIG);
       const originalSize = text.length;

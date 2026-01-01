@@ -68,7 +68,7 @@ const _validateNoPII = (
         if (patternName === "zipCode" && fieldName.includes("reference")) {
           continue;
         }
-        
+
         return yield* _(Effect.fail(new PIILeakageError({
           field: fieldName,
           pattern: patternName,
@@ -87,7 +87,7 @@ const _validateNoPII = (
  */
 const sanitizeText = (text: string): string => {
   let sanitized = text;
-  
+
   // Remove phone numbers
   sanitized = sanitized.replace(PII_PATTERNS.phone, "[PHONE]");
   // Remove SSN
@@ -100,7 +100,16 @@ const sanitizeText = (text: string): string => {
   sanitized = sanitized.replace(PII_PATTERNS.address, "[ADDRESS]");
   // Remove DOB patterns
   sanitized = sanitized.replace(PII_PATTERNS.dobPattern, "[DOB]");
-  
+  // Remove generic dates
+  sanitized = sanitized.replace(/\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/g, "[DATE]");
+  sanitized = sanitized.replace(/\b\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}\b/g, "[DATE]");
+  // Remove titled names / signature lines (common leakage path in reports)
+  sanitized = sanitized.replace(/\b(?:Dr|Doctor)\.?\s+[A-Z][a-z]{2,}\s+[A-Z][a-z]{2,}\b/g, "[NAME]");
+  // Remove signature lines that commonly include clinician names
+  sanitized = sanitized.replace(/\bSigned\s+by:\s*.*$/gmi, "Signed by: [NAME]");
+  // Remove common credential suffixes that can preserve names in text blobs
+  sanitized = sanitized.replace(/\b[\s,]*(?:M\.?D\.?|D\.?O\.?|M\.?B\.?B\.?S\.?|R\.?N\.?|P\.?A\.?|N\.?P\.?)\b/g, "");
+
   return sanitized;
 };
 
@@ -119,7 +128,7 @@ const LAB_TEST_PATTERNS: Record<string, RegExp> = {
   MCH: /(?:MCH|Mean Corpuscular Hemoglobin)[:\s]*(\d+\.?\d*)\s*(pg)?/i,
   MCHC: /(?:MCHC)[:\s]*(\d+\.?\d*)\s*(g\/dL)?/i,
   RDW: /(?:RDW|Red Cell Distribution Width)[:\s]*(\d+\.?\d*)\s*(%)?/i,
-  
+
   // BMP/CMP
   Glucose: /(?:Glucose|Blood Sugar|BS)[:\s]*(\d+\.?\d*)\s*(mg\/dL|mmol\/L)?/i,
   BUN: /(?:BUN|Blood Urea Nitrogen)[:\s]*(\d+\.?\d*)\s*(mg\/dL)?/i,
@@ -129,7 +138,7 @@ const LAB_TEST_PATTERNS: Record<string, RegExp> = {
   Chloride: /(?:Chloride|Cl)[:\s]*(\d+\.?\d*)\s*(mEq\/L|mmol\/L)?/i,
   CO2: /(?:CO2|Bicarbonate|HCO3)[:\s]*(\d+\.?\d*)\s*(mEq\/L|mmol\/L)?/i,
   Calcium: /(?:Calcium|Ca)[:\s]*(\d+\.?\d*)\s*(mg\/dL)?/i,
-  
+
   // Liver Panel
   AST: /(?:AST|SGOT|Aspartate Aminotransferase)[:\s]*(\d+\.?\d*)\s*(U\/L|IU\/L)?/i,
   ALT: /(?:ALT|SGPT|Alanine Aminotransferase)[:\s]*(\d+\.?\d*)\s*(U\/L|IU\/L)?/i,
@@ -137,34 +146,34 @@ const LAB_TEST_PATTERNS: Record<string, RegExp> = {
   Bilirubin: /(?:Bilirubin|Total Bilirubin|T\.?\s*Bili)[:\s]*(\d+\.?\d*)\s*(mg\/dL)?/i,
   Albumin: /(?:Albumin|Alb)[:\s]*(\d+\.?\d*)\s*(g\/dL)?/i,
   TotalProtein: /(?:Total Protein|TP)[:\s]*(\d+\.?\d*)\s*(g\/dL)?/i,
-  
+
   // Lipid Panel
   TotalCholesterol: /(?:Total Cholesterol|Cholesterol)[:\s]*(\d+\.?\d*)\s*(mg\/dL)?/i,
   LDL: /(?:LDL|LDL-C|LDL Cholesterol)[:\s]*(\d+\.?\d*)\s*(mg\/dL)?/i,
   HDL: /(?:HDL|HDL-C|HDL Cholesterol)[:\s]*(\d+\.?\d*)\s*(mg\/dL)?/i,
   Triglycerides: /(?:Triglycerides|TG|Trig)[:\s]*(\d+\.?\d*)\s*(mg\/dL)?/i,
-  
+
   // Thyroid
   TSH: /(?:TSH|Thyroid Stimulating Hormone)[:\s]*(\d+\.?\d*)\s*(mIU\/L|uIU\/mL)?/i,
   T4: /(?:T4|Free T4|FT4|Thyroxine)[:\s]*(\d+\.?\d*)\s*(ng\/dL)?/i,
   T3: /(?:T3|Free T3|FT3|Triiodothyronine)[:\s]*(\d+\.?\d*)\s*(pg\/mL)?/i,
-  
+
   // Coagulation
   PT: /(?:PT|Prothrombin Time)[:\s]*(\d+\.?\d*)\s*(seconds|sec|s)?/i,
   INR: /(?:INR|International Normalized Ratio)[:\s]*(\d+\.?\d*)/i,
   PTT: /(?:PTT|aPTT|Partial Thromboplastin Time)[:\s]*(\d+\.?\d*)\s*(seconds|sec|s)?/i,
-  
+
   // Cardiac
   Troponin: /(?:Troponin|TnI|TnT|Troponin I|Troponin T)[:\s]*(<?\d*\.?\d*)\s*(ng\/mL|ng\/L)?/i,
   BNP: /(?:BNP|B-type Natriuretic Peptide|NT-proBNP)[:\s]*(\d+\.?\d*)\s*(pg\/mL)?/i,
-  
+
   // A1C
   HbA1c: /(?:HbA1c|A1C|Hemoglobin A1c|Glycated Hemoglobin)[:\s]*(\d+\.?\d*)\s*(%)?/i,
-  
+
   // Inflammatory
   CRP: /(?:CRP|C-Reactive Protein)[:\s]*(\d+\.?\d*)\s*(mg\/L|mg\/dL)?/i,
   ESR: /(?:ESR|Sed Rate|Sedimentation Rate)[:\s]*(\d+\.?\d*)\s*(mm\/hr)?/i,
-  
+
   // Tumor Markers
   PSA: /(?:PSA|Prostate Specific Antigen)[:\s]*(\d+\.?\d*)\s*(ng\/mL)?/i,
   CEA: /(?:CEA|Carcinoembryonic Antigen)[:\s]*(\d+\.?\d*)\s*(ng\/mL)?/i,
@@ -279,32 +288,32 @@ const extractMedications = (
 ): Medication[] => {
   const medications: Medication[] = [];
   const seen = new Set<string>();
-  
+
   let match;
   const pattern = new RegExp(MEDICATION_PATTERN.source, MEDICATION_PATTERN.flags);
-  
+
   while ((match = pattern.exec(text)) !== null) {
     const name = match[1];
     const dose = match[2];
     const unit = match[3];
     const route = match[4]?.toLowerCase();
     const frequency = match[5];
-    
+
     // Validate it's likely a real medication
-    const isKnown = KNOWN_MEDICATIONS.has(name) || 
-                    Array.from(KNOWN_MEDICATIONS).some(m => 
-                      m.toLowerCase() === name.toLowerCase()
-                    );
-    
+    const isKnown = KNOWN_MEDICATIONS.has(name) ||
+      Array.from(KNOWN_MEDICATIONS).some(m =>
+        m.toLowerCase() === name.toLowerCase()
+      );
+
     // Skip if it looks like a name (not in our medication list and has name-like pattern)
     if (!isKnown && /^[A-Z][a-z]+$/.test(name)) {
       continue;
     }
-    
+
     const key = `${name}-${dose}-${unit}`.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    
+
     medications.push({
       name,
       dose,
@@ -314,7 +323,7 @@ const extractMedications = (
       status: "active",
     });
   }
-  
+
   return medications;
 };
 
@@ -350,27 +359,27 @@ const extractDiagnoses = (
 ): Diagnosis[] => {
   const diagnoses: Diagnosis[] = [];
   const seen = new Set<string>();
-  
+
   for (const pattern of DIAGNOSIS_PATTERNS) {
     let match;
     const regex = new RegExp(pattern.source, pattern.flags);
-    
+
     while ((match = regex.exec(text)) !== null) {
       let condition = match[2] || match[1];
       const icdCode = /^[A-Z]\d{2}/.test(match[1]) ? match[1] : undefined;
-      
+
       // Clean up the condition text
       condition = condition.trim().replace(/[,;.]$/, "");
-      
+
       // Validate it doesn't contain PII patterns
       if (PII_PATTERNS.potentialName.test(condition)) {
         continue;
       }
-      
+
       const key = condition.toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);
-      
+
       // Determine severity from keywords
       let severity: Severity = "unspecified";
       for (const [keyword, sev] of Object.entries(SEVERITY_KEYWORDS)) {
@@ -379,7 +388,7 @@ const extractDiagnoses = (
           break;
         }
       }
-      
+
       diagnoses.push({
         condition: sanitizeText(condition),
         icdCode,
@@ -388,7 +397,7 @@ const extractDiagnoses = (
       });
     }
   }
-  
+
   return diagnoses;
 };
 
@@ -430,7 +439,7 @@ const extractImagingFindings = (
   _errorCollector: ExtractionErrorCollector
 ): ImagingFinding[] => {
   const findings: ImagingFinding[] = [];
-  
+
   // Determine modality
   let modality: ImagingFinding["modality"] = "other";
   for (const [mod, pattern] of Object.entries(IMAGING_MODALITY_PATTERNS)) {
@@ -439,7 +448,7 @@ const extractImagingFindings = (
       break;
     }
   }
-  
+
   // Extract body part
   let bodyPart = "unspecified";
   for (const pattern of BODY_PART_PATTERNS) {
@@ -449,7 +458,7 @@ const extractImagingFindings = (
       break;
     }
   }
-  
+
   // Extract findings
   const extractedFindings: string[] = [];
   for (const pattern of FINDING_PATTERNS) {
@@ -464,11 +473,11 @@ const extractImagingFindings = (
       }
     }
   }
-  
+
   // Extract impression
   const impressionMatch = text.match(/(?:Impression|Conclusion)[:\s]*([^\n]+(?:\n(?![A-Z]{2,}:)[^\n]+)*)/i);
   const impression = impressionMatch ? sanitizeText(impressionMatch[1].trim()) : undefined;
-  
+
   if (extractedFindings.length > 0 || impression) {
     findings.push({
       modality,
@@ -477,7 +486,7 @@ const extractImagingFindings = (
       impression,
     });
   }
-  
+
   return findings;
 };
 
@@ -607,9 +616,9 @@ const extractPathologyResults = (
 const classifyDocument = (text: string): ExtendedDocumentType => {
 
   if (/(?:lab|laboratory|result|panel|cbc|bmp|cmp|lipid)/i.test(text) &&
-      Object.keys(LAB_TEST_PATTERNS).some(test =>
-        new RegExp(test, "i").test(text)
-      )) {
+    Object.keys(LAB_TEST_PATTERNS).some(test =>
+      new RegExp(test, "i").test(text)
+    )) {
     return "lab_report";
   }
 
@@ -702,13 +711,13 @@ export const extractMedicalData = (
   return Effect.gen(function* (_) {
     const { text, filename, documentHash } = input;
     const errorCollector = new ExtractionErrorCollector();
-    
+
     // Classify document type
     const documentType = classifyDocument(text);
-    
+
     // Extract date
     const documentDate = extractDocumentDate(text, filename);
-    
+
     // Extract all clinical data (whitelist approach)
     const labResults = extractLabResults(text, errorCollector);
     const medications = extractMedications(text, errorCollector);
@@ -716,7 +725,7 @@ export const extractMedicalData = (
     const imagingFindings = extractImagingFindings(text, errorCollector);
     const vitalSigns = extractVitalSigns(text, errorCollector);
     const pathologyResults = extractPathologyResults(text, errorCollector);
-    
+
     // Check for PII leakage
     if (errorCollector.hasPIILeaks()) {
       const piiErrors = errorCollector.getErrors().filter(
@@ -724,26 +733,26 @@ export const extractMedicalData = (
       );
       return yield* _(Effect.fail(piiErrors[0] as PIILeakageError));
     }
-    
+
     // Create lab panels from results
     const labPanels: ExtendedLabPanel[] = labResults.length > 0 ? [{
       collectionDate: documentDate || "unknown",
       results: labResults,
     }] : [];
-    
+
     // Calculate confidence based on extraction success
-    const totalExtracted = 
-      labResults.length + 
-      medications.length + 
-      diagnoses.length + 
-      imagingFindings.length + 
+    const totalExtracted =
+      labResults.length +
+      medications.length +
+      diagnoses.length +
+      imagingFindings.length +
       vitalSigns.length +
       pathologyResults.length;
-    
+
     const confidence = Math.min(100, Math.max(0,
       totalExtracted > 0 ? 70 + Math.min(30, totalExtracted * 3) : 30
     ));
-    
+
     const record: ExtractedMedicalRecord = {
       sourceDocumentHash: documentHash,
       documentType,
@@ -760,7 +769,7 @@ export const extractMedicalData = (
       warnings: errorCollector.getWarnings(),
       sectionsSkipped: [],
     };
-    
+
     return record;
   });
 };

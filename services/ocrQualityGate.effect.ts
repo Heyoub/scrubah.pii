@@ -20,6 +20,7 @@
 import { Effect, Context, Layer } from "effect";
 import Tesseract from "tesseract.js";
 import { pipeline } from "@huggingface/transformers";
+import { appLogger } from "./appLogger";
 import {
   OCRWord,
   OCRQualityResult,
@@ -60,19 +61,19 @@ interface TesseractResult {
 // TROCR MODEL (lazy loaded)
 // ============================================================================
 
- 
+
 let trOCRPipeline: any = null;
 
 const loadTrOCR = async (): Promise<typeof trOCRPipeline> => {
   if (trOCRPipeline) return trOCRPipeline;
 
-  console.log("[OCR Quality] Loading TrOCR model (first time only)...");
+  appLogger.info('trocr_model_loading');
   trOCRPipeline = await pipeline(
     "image-to-text",
     "Xenova/trocr-small-printed",
     { dtype: "q8" } // quantized for browser
   );
-  console.log("[OCR Quality] TrOCR model loaded");
+  appLogger.info('trocr_model_loaded');
   return trOCRPipeline;
 };
 
@@ -141,8 +142,8 @@ const computeMetrics = (words: OCRWord[]): OCRQualityMetrics => {
   const medianWordConfidence =
     confidences.length % 2 === 0
       ? (confidences[confidences.length / 2 - 1] +
-          confidences[confidences.length / 2]) /
-        2
+        confidences[confidences.length / 2]) /
+      2
       : confidences[Math.floor(confidences.length / 2)];
   const meanWordConfidence =
     confidences.reduce((a, b) => a + b, 0) / confidences.length;
@@ -405,9 +406,7 @@ class OCRQualityServiceImpl implements OCRQualityService {
             const result = await Tesseract.recognize(image, "eng", {
               logger: (m) => {
                 if (m.status === "recognizing text") {
-                  console.debug(
-                    `[OCR] Progress: ${Math.round(m.progress * 100)}%`
-                  );
+                  appLogger.debug('ocr_progress', { percent: Math.round(m.progress * 100) });
                 }
               },
             });
@@ -435,10 +434,10 @@ class OCRQualityServiceImpl implements OCRQualityService {
         config.enableTrOCR &&
         quality.lowConfidenceRegions.length > 0
       ) {
-        console.log(
-          `[OCR Quality] Low quality detected (score: ${quality.score.toFixed(2)}). ` +
-            `Attempting TrOCR repair on ${quality.lowConfidenceRegions.length} regions...`
-        );
+        appLogger.warn('ocr_quality_low_attempt_trocr', {
+          score: Number(quality.score.toFixed(2)),
+          regions: quality.lowConfidenceRegions.length,
+        });
 
         // Note: TrOCR repair requires canvas context which we don't have here
         // The caller should use repairWithTrOCR if they have canvas access
@@ -468,14 +467,15 @@ class OCRQualityServiceImpl implements OCRQualityService {
         const model = await loadTrOCR();
 
         if (!model) {
-          console.warn("[OCR Quality] TrOCR model not available, skipping repair");
+          appLogger.warn('trocr_model_unavailable');
           return regions;
         }
 
         // For each region, crop and run TrOCR
         const repairedRegions: LowConfidenceRegion[] = [];
 
-        for (const region of regions) {
+        for (let i = 0; i < regions.length; i++) {
+          const region = regions[i];
           try {
             // Create canvas for cropping if not provided
             const cropCanvas = canvas || document.createElement("canvas");
@@ -521,14 +521,13 @@ class OCRQualityServiceImpl implements OCRQualityService {
               repairedText,
             });
 
-            console.log(
-              `[TrOCR] Repaired: "${region.originalText}" → "${repairedText}"`
-            );
+            appLogger.debug('trocr_region_repaired', {
+              regionIndex: i,
+              repairedLength: repairedText.length,
+            });
           } catch (error) {
-            console.warn(
-              `[TrOCR] Failed to repair region: ${error}`,
-              region
-            );
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            appLogger.warn('trocr_region_failed', { regionIndex: i, errorMessage });
             repairedRegions.push(region);
           }
         }

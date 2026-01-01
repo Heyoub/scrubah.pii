@@ -16,6 +16,7 @@
 
 import { Effect, Schema as S, pipe } from "effect";
 import { ProcessedFile } from "../schemas/schemas";
+import { appLogger, isProductionMode } from "./appLogger";
 
 /**
  * RELEVANCE SCORE SCHEMA
@@ -196,10 +197,14 @@ const calculatePlaceholderDensity = (text: string): Effect.Effect<number, never,
   return Effect.sync(() => {
     if (text.length === 0) return 1.0; // Empty = 100% garbage
 
+    // Ignore whitespace to avoid undercounting placeholder-heavy documents
+    const nonWhitespaceLength = text.replace(/\s+/g, "").length;
+    if (nonWhitespaceLength === 0) return 1.0;
+
     const placeholders: string[] = text.match(/\[[A-Z_]+_\d+\]/g) || [];
     const placeholderChars = placeholders.reduce((sum, p) => sum + p.length, 0);
 
-    return placeholderChars / text.length;
+    return placeholderChars / nonWhitespaceLength;
   });
 };
 
@@ -393,8 +398,8 @@ export const collectGarbage = (
   discarded: ProcessedFile[];
 }, never, never> => {
   return Effect.gen(function* (_) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('🗑️  Running garbage collection on documents...');
+    if (!isProductionMode()) {
+      appLogger.debug('gc_start', { documentCount: documents.length });
     }
 
     const kept: ProcessedFile[] = [];
@@ -411,13 +416,16 @@ export const collectGarbage = (
       const relevance = yield* _(calculateRelevanceScore(doc.scrubbedText, doc.originalName));
 
       // Log details
-      if (process.env.NODE_ENV !== 'production') {
-        console.log(`📄 ${doc.originalName}:`);
-        console.log(`   Score: ${relevance.score.toFixed(0)}/100`);
-        console.log(`   Placeholders: ${(relevance.placeholderDensity * 100).toFixed(0)}%`);
-        console.log(`   Medical: ${(relevance.medicalContentDensity * 100).toFixed(0)}%`);
-        console.log(`   Refs: ${relevance.clinicalReferences} | Gen: ${relevance.generation}`);
-        console.log(`   → ${relevance.recommendation.toUpperCase()}: ${relevance.reason}`);
+      if (!isProductionMode()) {
+        appLogger.debug('gc_doc_score', {
+          filename: doc.originalName,
+          score: Number(relevance.score.toFixed(0)),
+          placeholderPercent: Number((relevance.placeholderDensity * 100).toFixed(0)),
+          medicalPercent: Number((relevance.medicalContentDensity * 100).toFixed(0)),
+          clinicalReferences: relevance.clinicalReferences,
+          generation: relevance.generation,
+          recommendation: relevance.recommendation,
+        });
       }
 
       // Sort into buckets
@@ -430,12 +438,14 @@ export const collectGarbage = (
       }
     }
 
-    if (process.env.NODE_ENV !== 'production') {
-      console.log(`\n✅ GC Results:`);
-      console.log(`   Kept: ${kept.length} (high value)`);
-      console.log(`   Demoted: ${demoted.length} (low priority)`);
-      console.log(`   Discarded: ${discarded.length} (garbage)`);
-      console.log(`   Memory saved: ${discarded.length}/${documents.length} documents (${((discarded.length / documents.length) * 100).toFixed(0)}%)\n`);
+    if (!isProductionMode()) {
+      appLogger.debug('gc_complete', {
+        kept: kept.length,
+        demoted: demoted.length,
+        discarded: discarded.length,
+        documentCount: documents.length,
+        savedPercent: documents.length > 0 ? Number(((discarded.length / documents.length) * 100).toFixed(0)) : 0,
+      });
     }
 
     return { kept, demoted, discarded };

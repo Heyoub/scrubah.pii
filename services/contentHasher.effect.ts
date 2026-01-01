@@ -25,6 +25,7 @@ import {
   DifferenceType,
 } from "../schemas/schemas";
 import { ValidationError } from "./errors";
+import { appLogger } from "./appLogger";
 
 // ============================================================================
 // CORE HASHING FUNCTIONS
@@ -58,7 +59,8 @@ export const generateContentHash = (text: string): Effect.Effect<string, never, 
     },
     catch: (error) => {
       // crypto.subtle.digest should never fail in practice, but Effect requires explicit error handling
-      console.error('Unexpected hash generation error:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      appLogger.error('hash_generation_failed', { errorMessage });
       return new Error('Hash generation failed') as never;
     },
   });

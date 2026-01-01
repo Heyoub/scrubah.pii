@@ -19,6 +19,7 @@
 
 import { Effect, Context, Layer, pipe } from "effect";
 import { pipeline, FeatureExtractionPipeline } from "@huggingface/transformers";
+import { appLogger } from "./appLogger";
 import {
   EmbeddingConfig,
   defaultEmbeddingConfig,
@@ -74,11 +75,11 @@ const loadEmbeddingModel = async (
 ): Promise<FeatureExtractionPipeline> => {
   if (embeddingPipeline) return embeddingPipeline;
 
-  console.log(`[Semantic Dedup] Loading embedding model: ${modelId}...`);
+  appLogger.info('semantic_dedup_model_loading', { modelId });
   embeddingPipeline = (await pipeline("feature-extraction", modelId, {
     dtype: "q8", // quantized for browser
   })) as unknown as FeatureExtractionPipeline;
-  console.log("[Semantic Dedup] Embedding model loaded");
+  appLogger.info('semantic_dedup_model_loaded', { modelId });
 
   return embeddingPipeline;
 };
@@ -508,28 +509,24 @@ class SemanticDedupServiceImpl implements SemanticDedupService {
       const config = { ...defaultEmbeddingConfig, ...configOverrides };
 
       // Step 1: Generate embeddings
-      console.log(
-        `[Semantic Dedup] Generating embeddings for ${documents.length} documents...`
-      );
+      appLogger.info('semantic_dedup_embeddings_start', { documentCount: documents.length });
       const embeddings = yield* _(
         this.generateEmbeddings(documents, config)
       );
 
       // Step 2: Find similar pairs
-      console.log("[Semantic Dedup] Computing pairwise similarities...");
+      appLogger.info('semantic_dedup_similarity_start');
       const pairs = yield* _(this.findSimilarPairs(embeddings, config));
-      console.log(
-        `[Semantic Dedup] Found ${pairs.length} similar pairs`
-      );
+      appLogger.info('semantic_dedup_similarity_done', { pairCount: pairs.length });
 
       // Step 3: Cluster documents
-      console.log("[Semantic Dedup] Clustering documents...");
+      appLogger.info('semantic_dedup_clustering_start');
       const rawClusters = yield* _(
         this.clusterDocuments(embeddings, pairs, config)
       );
 
       // Step 4: Select representatives
-      console.log("[Semantic Dedup] Selecting representatives...");
+      appLogger.info('semantic_dedup_selection_start');
       const clusters = yield* _(
         this.selectRepresentatives(rawClusters, documents, criteria)
       );
@@ -545,10 +542,12 @@ class SemanticDedupServiceImpl implements SemanticDedupService {
 
       const processingTimeMs = Math.round(performance.now() - startTime);
 
-      console.log(
-        `[Semantic Dedup] Complete: ${uniqueDocCount} unique docs from ${documents.length} ` +
-          `(${(reductionRatio * 100).toFixed(1)}% reduction)`
-      );
+      appLogger.info('semantic_dedup_complete', {
+        totalDocuments: documents.length,
+        uniqueDocuments: uniqueDocCount,
+        reductionPercent: Number((reductionRatio * 100).toFixed(1)),
+        processingTimeMs,
+      });
 
       return {
         clusters,

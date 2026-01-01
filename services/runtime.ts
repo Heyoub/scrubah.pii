@@ -23,6 +23,7 @@
 
 import { Effect, Runtime, Console, Logger } from "effect";
 import type { ServiceError } from "./errors";
+import { appLogger } from "./appLogger";
 
 // ============================================================================
 // RUNTIME CONFIGURATION
@@ -49,15 +50,14 @@ const AppLogger = Logger.make(({ logLevel, message, annotations }) => {
     ...annotations,
   };
 
-  // Console output (development)
   if (level === "ERROR" || level === "FATAL") {
-    console.error(JSON.stringify(logEntry));
+    appLogger.error("effect_log", logEntry);
   } else if (level === "WARN") {
-    console.warn(JSON.stringify(logEntry));
+    appLogger.warn("effect_log", logEntry);
   } else if (level === "INFO") {
-    console.info(JSON.stringify(logEntry));
+    appLogger.info("effect_log", logEntry);
   } else {
-    console.log(JSON.stringify(logEntry));
+    appLogger.debug("effect_log", logEntry);
   }
 });
 
@@ -175,16 +175,16 @@ export const runWithLogging = async <A, E>(
 ): Promise<{ success: true; data: A } | { success: false; error: E }> => {
   const startTime = Date.now();
 
-  console.log(`🚀 Starting: ${operationName}`);
+  appLogger.info('operation_start', { operation: operationName });
 
   const result = await runPromise(effect);
 
   const duration = Date.now() - startTime;
 
   if (result.success) {
-    console.log(`✅ Completed: ${operationName} (${duration}ms)`);
+    appLogger.info('operation_success', { operation: operationName, durationMs: duration });
   } else {
-    console.error(`❌ Failed: ${operationName} (${duration}ms)`, result.error);
+    appLogger.error('operation_failed', { operation: operationName, durationMs: duration });
   }
 
   return result;
@@ -217,7 +217,7 @@ export const runWithRetry = async <A, E extends { recoverable: boolean }>(
 
     if (result.success) {
       if (attempt > 1) {
-        console.log(`✅ Retry succeeded on attempt ${attempt}`);
+        appLogger.info('retry_succeeded', { attempt });
       }
       return result;
     }
@@ -226,18 +226,18 @@ export const runWithRetry = async <A, E extends { recoverable: boolean }>(
 
     // Do not retry unrecoverable errors
     if (!lastError.recoverable) {
-      console.error(`❌ Unrecoverable error on attempt ${attempt}, aborting retry.`);
+      appLogger.error('retry_unrecoverable', { attempt });
       break;
     }
 
     if (attempt < options.attempts) {
       const delay = options.delayMs * Math.pow(2, attempt - 1);
-      console.warn(`⚠️ Attempt ${attempt} failed, retrying in ${delay}ms...`);
+      appLogger.warn('retry_scheduled', { attempt, delayMs: delay });
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
 
-  console.error(`❌ All ${options.attempts} attempts failed`);
+  appLogger.error('retry_exhausted', { attempts: options.attempts });
   // lastError is guaranteed to be defined here since we validated attempts > 0
   return { success: false, error: lastError as E };
 };
