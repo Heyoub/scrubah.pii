@@ -20,7 +20,7 @@
     "local-first"
   ],
   "private": false,
-  "packageManager": "pnpm@9.15.4",
+  "packageManager": "pnpm@10.0.0",
   "engines": {
     "node": "^20.0.0"
   },
