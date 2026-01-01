@@ -55,14 +55,11 @@ import {
  * Uses type assertion to work with Effect Schema v3 Context parameter
  */
 const expectValid = async <A, I>(
-  schema: S.Schema<A, I, any>,
+  schema: S.Schema<A, I, never>,
   input: I
 ): Promise<A> => {
-  const result = S.decodeUnknownEither(schema as S.Schema<A, I, never>)(input);
-  if (result._tag === 'Left') {
-    throw new Error(`Expected valid, but got error: ${JSON.stringify(result.left)}`);
-  }
-  return result.right;
+  const result = await Effect.runPromise(S.decodeUnknown(schema)(input));
+  return result;
 };
 
 /**
@@ -70,14 +67,20 @@ const expectValid = async <A, I>(
  * Uses type assertion to work with Effect Schema v3 Context parameter
  */
 const expectInvalid = async <A, I>(
-  schema: S.Schema<A, I, any>,
+  schema: S.Schema<A, I, never>,
   input: unknown
-): Promise<ParseResult.ParseError> => {
-  const result = S.decodeUnknownEither(schema as S.Schema<A, I, never>)(input);
-  if (result._tag === 'Right') {
-    throw new Error(`Expected invalid, but got valid: ${JSON.stringify(result.right)}`);
+): Promise<void> => {
+  try {
+    await Effect.runPromise(S.decodeUnknown(schema)(input));
+    throw new Error(`Expected invalid, but got valid`);
+  } catch (error) {
+    // Expected to throw - any error is fine for validation tests
+    if (error instanceof Error && error.message === `Expected invalid, but got valid`) {
+      throw error;
+    }
+    // Successfully caught validation error
+    return;
   }
-  return result.left;
 };
 
 // ============================================================================
